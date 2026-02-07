@@ -37,11 +37,13 @@ export const LeadCard = ({
   isDraggable = false,
   onLeadUpdate,
   onClick,
+  compact = false,
 }: {
   lead: Lead;
   isDraggable?: boolean;
   onLeadUpdate?: (updatedLead: Lead) => void;
   onClick?: (lead: Lead) => void;
+  compact?: boolean;
 }) => {
   const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -339,6 +341,44 @@ Se quiser saber mais, é só acessar:
       setIsValidatingWhatsApp(false);
     }
   };
+
+  if (compact) {
+    return (
+      <Card
+        ref={setNodeRef}
+        style={style}
+        {...attributesWithoutClassName}
+        {...listeners}
+        className="p-3 cursor-pointer hover:border-primary/50 transition-all hover:shadow-md group min-w-0 w-full overflow-hidden max-h-[100px] flex flex-col"
+        onClick={() => {
+          if (!isDragging && onClick) {
+            onClick(lead);
+          }
+        }}
+      >
+        <div className="flex flex-col gap-1.5 min-h-0">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <h3 className="font-medium text-sm group-hover:text-primary transition-colors truncate cursor-default">
+                  {lead.name}
+                </h3>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{lead.name}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <div className="flex items-center justify-between gap-2">
+            <StatusBadge status={lead.status as any} />
+            <span className="text-[10px] text-muted-foreground flex-shrink-0">
+              {format(new Date(lead.created_at), "dd/MM/yy", { locale: ptBR })}
+            </span>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card
