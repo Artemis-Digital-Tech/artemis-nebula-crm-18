@@ -9,11 +9,22 @@ type StatsCardProps = {
     value: number;
     isPositive: boolean;
   };
+  className?: string;
 };
 
-export const StatsCard = ({ title, value, icon: Icon, trend }: StatsCardProps) => {
+export const StatsCard = ({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  className,
+}: StatsCardProps) => {
   return (
-    <Card className="p-6 hover:shadow-lg hover:shadow-primary/5 transition-all group">
+    <Card
+      className={`p-6 hover:shadow-lg hover:shadow-primary/5 transition-all group ${
+        className ?? ""
+      }`}
+    >
       <div className="flex items-start justify-between">
         <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>

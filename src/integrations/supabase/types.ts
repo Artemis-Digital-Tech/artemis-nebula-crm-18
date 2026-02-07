@@ -221,6 +221,83 @@ export type Database = {
           },
         ]
       }
+      lead_value_entries: {
+        Row: {
+          id: string
+          lead_id: string
+          value_type_id: string
+          value: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          lead_id: string
+          value_type_id: string
+          value?: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          lead_id?: string
+          value_type_id?: string
+          value?: number
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_value_entries_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_value_entries_value_type_id_fkey"
+            columns: ["value_type_id"]
+            isOneToOne: false
+            referencedRelation: "lead_value_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_value_types: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          description: string | null
+          key: string
+          display_order: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          description?: string | null
+          key: string
+          display_order?: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          description?: string | null
+          key?: string
+          display_order?: number
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_value_types_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           ai_interaction_id: string | null

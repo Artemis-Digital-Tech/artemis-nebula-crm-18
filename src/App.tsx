@@ -6,11 +6,13 @@ import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import LeadForm from "./pages/LeadForm";
 import Leads from "./pages/Leads";
 import Categories from "./pages/Categories";
 import CategoryManager from "./pages/CategoryManager";
+import ValueTypeManager from "./pages/ValueTypeManager";
 import StatusManager from "./pages/StatusManager";
 import LeadSearch from "./pages/LeadSearch";
 import Agents from "./pages/Agents";
@@ -45,6 +47,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
             <Route
               path="/dashboard"
               element={
@@ -82,6 +85,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <CategoryManager />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/value-types"
+              element={
+                <ProtectedRoute>
+                  <ValueTypeManager />
                 </ProtectedRoute>
               }
             />

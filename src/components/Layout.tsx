@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Clock,
   CalendarDays,
+  CircleDollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -266,6 +267,11 @@ const menuItems: MenuItem[] = [
         url: "/category-manager",
         icon: FolderKanban,
       },
+      {
+        title: "Tipos de Valor",
+        url: "/value-types",
+        icon: CircleDollarSign,
+      },
     ],
   },
   { title: "Funil de Vendas", url: "/status-manager", icon: TrendingUp },
@@ -309,7 +315,11 @@ const menuItems: MenuItem[] = [
     icon: Bot,
     subItems: [
       { title: "Agentes de IA", url: "/ai-interaction", icon: Bot },
-      { title: "Roteiros de Conversação", url: "/agent-scripts", icon: FileText },
+      {
+        title: "Roteiros de Conversação",
+        url: "/agent-scripts",
+        icon: FileText,
+      },
       { title: "Habilidades e Integrações", url: "/abilities", icon: Bot },
       {
         title: "Documentação e Contexto",

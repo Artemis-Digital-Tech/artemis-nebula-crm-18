@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,16 +20,16 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { 
-  ArrowLeft, 
-  Save, 
-  Trash2, 
-  DollarSign, 
-  ExternalLink, 
-  MessageCircle, 
-  AlertTriangle, 
-  Info, 
-  RefreshCw, 
+import {
+  ArrowLeft,
+  Save,
+  Trash2,
+  DollarSign,
+  ExternalLink,
+  MessageCircle,
+  AlertTriangle,
+  Info,
+  RefreshCw,
   CheckCircle,
   User,
   Building2,
@@ -38,11 +44,20 @@ import {
   FileText,
   Sparkles,
   Plus,
-  X
+  X,
 } from "lucide-react";
 import { useOrganization } from "@/hooks/useOrganization";
-import { cleanPhoneNumber, formatPhoneDisplay, formatWhatsAppNumber, cn } from "@/lib/utils";
+import {
+  cleanPhoneNumber,
+  formatPhoneDisplay,
+  formatWhatsAppNumber,
+  cn,
+} from "@/lib/utils";
 import { LeadStatusService } from "@/services/LeadStatusService";
+import {
+  LeadValueTypeRepository,
+  type LeadValueType,
+} from "@/services/leadValueTypes";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +69,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+const valueTypeRepository = new LeadValueTypeRepository();
+
 const LeadForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -64,14 +81,20 @@ const LeadForm = () => {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
   const [aiInteractions, setAiInteractions] = useState<any[]>([]);
-  const [defaultAIInteractionId, setDefaultAIInteractionId] = useState<string | null>(null);
-  const [invalidWhatsAppConfirmed, setInvalidWhatsAppConfirmed] = useState(false);
+  const [defaultAIInteractionId, setDefaultAIInteractionId] = useState<
+    string | null
+  >(null);
+  const [invalidWhatsAppConfirmed, setInvalidWhatsAppConfirmed] =
+    useState(false);
   const [showWhatsAppDialog, setShowWhatsAppDialog] = useState(false);
   const [isValidatingWhatsApp, setIsValidatingWhatsApp] = useState(false);
   const [leadRemoteJid, setLeadRemoteJid] = useState<string | null>(null);
-  const [leadWhatsappVerified, setLeadWhatsappVerified] = useState<boolean>(false);
+  const [leadWhatsappVerified, setLeadWhatsappVerified] =
+    useState<boolean>(false);
   const [activeTab, setActiveTab] = useState("basic");
-  const [statusOptions, setStatusOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [statusOptions, setStatusOptions] = useState<
+    Array<{ id: string; label: string }>
+  >([]);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -103,7 +126,11 @@ const LeadForm = () => {
     payment_stripe_id: "",
     payment_status: "nao_criado",
   });
-  const [customValues, setCustomValues] = useState<Array<{ value: string; description: string }>>([]);
+  const [customValues, setCustomValues] = useState<
+    Array<{ value: string; description: string }>
+  >([]);
+  const [valueTypes, setValueTypes] = useState<LeadValueType[]>([]);
+  const [valueEntries, setValueEntries] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchCategories();
@@ -113,18 +140,30 @@ const LeadForm = () => {
 
   useEffect(() => {
     if (!organization?.id) return;
+    valueTypeRepository
+      .findAllByOrganization(organization.id)
+      .then(setValueTypes)
+      .catch(() => setValueTypes([]));
+  }, [organization?.id]);
+
+  useEffect(() => {
+    if (!organization?.id) return;
 
     const loadData = async () => {
       try {
         const statuses = await statusService.getAll(organization.id);
-        const options = statuses.map(s => ({ id: s.status_key, label: s.label }));
+        const options = statuses.map((s) => ({
+          id: s.status_key,
+          label: s.label,
+        }));
         setStatusOptions(options);
 
         if (!isEdit && !formData.status) {
-          const newStatus = statuses.find(s => s.status_key === "new");
-          const initialStatus = newStatus?.status_key || statuses[0]?.status_key || "";
+          const newStatus = statuses.find((s) => s.status_key === "new");
+          const initialStatus =
+            newStatus?.status_key || statuses[0]?.status_key || "";
           if (initialStatus) {
-            setFormData(prev => ({ ...prev, status: initialStatus }));
+            setFormData((prev) => ({ ...prev, status: initialStatus }));
           }
         }
       } catch (error: any) {
@@ -168,7 +207,10 @@ const LeadForm = () => {
       if (data?.default_ai_interaction_id) {
         setDefaultAIInteractionId(data.default_ai_interaction_id);
         if (!isEdit && !formData.ai_interaction_id) {
-          setFormData(prev => ({ ...prev, ai_interaction_id: data.default_ai_interaction_id }));
+          setFormData((prev) => ({
+            ...prev,
+            ai_interaction_id: data.default_ai_interaction_id,
+          }));
         }
       }
     } catch (error) {
@@ -203,12 +245,13 @@ const LeadForm = () => {
           contact_whatsapp: data.contact_whatsapp || "",
           phone: data.phone || "",
           source: data.source || "",
-          integration_start_time: data.integration_start_time?.slice(0, 5) || "09:00",
+          integration_start_time:
+            data.integration_start_time?.slice(0, 5) || "09:00",
           payment_amount: data.payment_amount
             ? data.payment_amount.toLocaleString("pt-BR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
             : "",
           ai_interaction_id: data.ai_interaction_id || "",
           company_name: data.company_name || "",
@@ -224,9 +267,9 @@ const LeadForm = () => {
           industry: data.industry || "",
           annual_revenue: data.annual_revenue
             ? data.annual_revenue.toLocaleString("pt-BR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
             : "",
           number_of_employees: data.number_of_employees?.toString() || "",
         });
@@ -237,18 +280,35 @@ const LeadForm = () => {
         });
         setLeadRemoteJid(data.remote_jid);
         setLeadWhatsappVerified(data.whatsapp_verified || false);
-        
+
         if (data.custom_values && Array.isArray(data.custom_values)) {
           const formattedValues = data.custom_values.map((item: any) => ({
-            value: typeof item.value === 'number' 
-              ? item.value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-              : (item.value || ""),
-            description: item.description || ""
+            value:
+              typeof item.value === "number"
+                ? item.value.toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
+                : item.value || "",
+            description: item.description || "",
           }));
           setCustomValues(formattedValues);
         } else {
           setCustomValues([]);
         }
+        valueTypeRepository
+          .getEntriesByLeadId(id)
+          .then((entries) => {
+            const map: Record<string, string> = {};
+            entries.forEach((e) => {
+              map[e.value_type_id] = e.value.toLocaleString("pt-BR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              });
+            });
+            setValueEntries(map);
+          })
+          .catch(() => setValueEntries({}));
       }
     } catch (error: any) {
       toast.error("Erro ao carregar lead");
@@ -265,19 +325,19 @@ const LeadForm = () => {
       formData.city,
       formData.state,
     ];
-    const filledFields = fields.filter(f => f && f.trim() !== "").length;
+    const filledFields = fields.filter((f) => f && f.trim() !== "").length;
     return Math.round((filledFields / fields.length) * 100);
   };
 
   const formatCustomValuesForSave = () => {
     return customValues
-      .filter(item => item.value && item.value.trim() !== "")
-      .map(item => {
+      .filter((item) => item.value && item.value.trim() !== "")
+      .map((item) => {
         const numericValue = item.value.replace(/\./g, "").replace(",", ".");
         const parsedValue = parseFloat(numericValue);
         return {
           value: isNaN(parsedValue) ? item.value : parsedValue,
-          description: item.description || ""
+          description: item.description || "",
         };
       });
   };
@@ -290,7 +350,11 @@ const LeadForm = () => {
     setCustomValues(customValues.filter((_, i) => i !== index));
   };
 
-  const updateCustomValue = (index: number, field: "value" | "description", newValue: string) => {
+  const updateCustomValue = (
+    index: number,
+    field: "value" | "description",
+    newValue: string
+  ) => {
     const updated = [...customValues];
     if (field === "value") {
       const cleaned = newValue.replace(/\D/g, "");
@@ -310,24 +374,59 @@ const LeadForm = () => {
     setCustomValues(updated);
   };
 
+  const updateValueEntry = (valueTypeId: string, raw: string) => {
+    const cleaned = raw.replace(/\D/g, "");
+    if (cleaned === "") {
+      setValueEntries((prev) => ({ ...prev, [valueTypeId]: "" }));
+      return;
+    }
+    const amount = parseFloat(cleaned) / 100;
+    const formatted = amount.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    setValueEntries((prev) => ({ ...prev, [valueTypeId]: formatted }));
+  };
+
+  const buildValueEntriesForSave = (): Array<{
+    value_type_id: string;
+    value: number;
+  }> => {
+    return valueTypes
+      .filter((vt) => valueEntries[vt.id] && valueEntries[vt.id].trim() !== "")
+      .map((vt) => {
+        const raw = valueEntries[vt.id].replace(/\./g, "").replace(",", ".");
+        const num = parseFloat(raw);
+        return { value_type_id: vt.id, value: isNaN(num) ? 0 : num };
+      })
+      .filter((e) => e.value > 0);
+  };
+
   const handleSubmitWithoutValidation = async () => {
     setLoading(true);
     try {
-      const cleanedPhone = formData.contact_whatsapp ? formatWhatsAppNumber(formData.contact_whatsapp) : null;
+      const cleanedPhone = formData.contact_whatsapp
+        ? formatWhatsAppNumber(formData.contact_whatsapp)
+        : null;
       const remoteJid = null;
       const whatsappVerified = false;
 
       const paymentAmount = formData.payment_amount
-        ? parseFloat(formData.payment_amount.replace(/\./g, "").replace(",", "."))
+        ? parseFloat(
+            formData.payment_amount.replace(/\./g, "").replace(",", ".")
+          )
         : null;
 
       const annualRevenue = formData.annual_revenue
-        ? parseFloat(formData.annual_revenue.replace(/\./g, "").replace(",", "."))
+        ? parseFloat(
+            formData.annual_revenue.replace(/\./g, "").replace(",", ".")
+          )
         : null;
 
-      const aiInteractionIdToSave = formData.ai_interaction_id === defaultAIInteractionId 
-        ? null 
-        : (formData.ai_interaction_id || null);
+      const aiInteractionIdToSave =
+        formData.ai_interaction_id === defaultAIInteractionId
+          ? null
+          : formData.ai_interaction_id || null;
 
       const leadData = {
         name: formData.name,
@@ -340,7 +439,9 @@ const LeadForm = () => {
         remote_jid: remoteJid,
         whatsapp_verified: whatsappVerified,
         source: formData.source || null,
-        integration_start_time: formData.integration_start_time ? `${formData.integration_start_time}:00+00` : null,
+        integration_start_time: formData.integration_start_time
+          ? `${formData.integration_start_time}:00+00`
+          : null,
         payment_amount: paymentAmount,
         ai_interaction_id: aiInteractionIdToSave,
         payment_link_url: paymentData.payment_link_url || null,
@@ -358,7 +459,9 @@ const LeadForm = () => {
         notes: formData.notes || null,
         industry: formData.industry || null,
         annual_revenue: annualRevenue,
-        number_of_employees: formData.number_of_employees ? parseInt(formData.number_of_employees) : null,
+        number_of_employees: formData.number_of_employees
+          ? parseInt(formData.number_of_employees)
+          : null,
         custom_values: formatCustomValuesForSave(),
         ...(isEdit ? {} : { organization_id: organization?.id }),
       };
@@ -369,11 +472,30 @@ const LeadForm = () => {
           .update(leadData)
           .eq("id", id);
         if (error) throw error;
-        toast.success("Lead atualizado! ⚠️ WhatsApp não verificado - mensagens automáticas desabilitadas.");
+        await valueTypeRepository.replaceEntriesForLead(
+          id,
+          buildValueEntriesForSave()
+        );
+        toast.success(
+          "Lead atualizado! ⚠️ WhatsApp não verificado - mensagens automáticas desabilitadas."
+        );
       } else {
-        const { error } = await supabase.from("leads").insert([leadData]);
+        const { data: inserted, error } = await supabase
+          .from("leads")
+          .insert([leadData])
+          .select("id")
+          .single();
         if (error) throw error;
-        toast.success("Lead criado! ⚠️ WhatsApp não verificado - mensagens automáticas desabilitadas.");
+        const leadId = inserted?.id;
+        if (leadId) {
+          await valueTypeRepository.replaceEntriesForLead(
+            leadId,
+            buildValueEntriesForSave()
+          );
+        }
+        toast.success(
+          "Lead criado! ⚠️ WhatsApp não verificado - mensagens automáticas desabilitadas."
+        );
       }
 
       setInvalidWhatsAppConfirmed(false);
@@ -395,21 +517,29 @@ const LeadForm = () => {
       if (formData.contact_whatsapp) {
         const cleanedPhone = cleanPhoneNumber(formData.contact_whatsapp);
         if (cleanedPhone.length < 10 || cleanedPhone.length > 13) {
-          toast.error("Número de WhatsApp inválido. Use formato: (11) 99999-9999");
+          toast.error(
+            "Número de WhatsApp inválido. Use formato: (11) 99999-9999"
+          );
           setLoading(false);
           return;
         }
       }
 
       const paymentAmount = formData.payment_amount
-        ? parseFloat(formData.payment_amount.replace(/\./g, "").replace(",", "."))
+        ? parseFloat(
+            formData.payment_amount.replace(/\./g, "").replace(",", ".")
+          )
         : null;
 
       const annualRevenue = formData.annual_revenue
-        ? parseFloat(formData.annual_revenue.replace(/\./g, "").replace(",", "."))
+        ? parseFloat(
+            formData.annual_revenue.replace(/\./g, "").replace(",", ".")
+          )
         : null;
 
-      const cleanedPhone = formData.contact_whatsapp ? formatWhatsAppNumber(formData.contact_whatsapp) : null;
+      const cleanedPhone = formData.contact_whatsapp
+        ? formatWhatsAppNumber(formData.contact_whatsapp)
+        : null;
 
       let remoteJid = null;
       let whatsappVerified = false;
@@ -426,34 +556,45 @@ const LeadForm = () => {
 
       if (cleanedPhone && !invalidWhatsAppConfirmed) {
         try {
-
           if (hasInstance) {
-            const { data: checkData, error: checkError } = await supabase.functions.invoke('evolution-check-whatsapp', {
-              body: { numbers: [cleanedPhone] }
-            });
+            const { data: checkData, error: checkError } =
+              await supabase.functions.invoke("evolution-check-whatsapp", {
+                body: { numbers: [cleanedPhone] },
+              });
 
             if (checkError) {
               console.error("Error checking WhatsApp:", checkError);
-              toast.warning("Não foi possível validar o WhatsApp automaticamente. O lead será criado sem validação.");
+              toast.warning(
+                "Não foi possível validar o WhatsApp automaticamente. O lead será criado sem validação."
+              );
               remoteJid = null;
               whatsappVerified = false;
-            } else if (checkData?.results?.[0]?.exists && checkData.results[0].jid) {
+            } else if (
+              checkData?.results?.[0]?.exists &&
+              checkData.results[0].jid
+            ) {
               remoteJid = checkData.results[0].jid;
               whatsappVerified = true;
               console.log("WhatsApp verified, jid:", remoteJid);
             } else {
-              toast.warning("Este número não está registrado no WhatsApp. O lead será criado sem validação.");
+              toast.warning(
+                "Este número não está registrado no WhatsApp. O lead será criado sem validação."
+              );
               remoteJid = null;
               whatsappVerified = false;
             }
           } else {
-            toast.info("⚠️ Nenhuma instância WhatsApp conectada na organização. O lead será criado, mas será necessário validar o WhatsApp posteriormente para agendar interações.");
+            toast.info(
+              "⚠️ Nenhuma instância WhatsApp conectada na organização. O lead será criado, mas será necessário validar o WhatsApp posteriormente para agendar interações."
+            );
             remoteJid = null;
             whatsappVerified = false;
           }
         } catch (error) {
           console.error("Error validating WhatsApp:", error);
-          toast.warning("Erro ao validar WhatsApp. O lead será criado sem validação.");
+          toast.warning(
+            "Erro ao validar WhatsApp. O lead será criado sem validação."
+          );
           remoteJid = null;
           whatsappVerified = false;
         }
@@ -473,7 +614,9 @@ const LeadForm = () => {
         remote_jid: remoteJid,
         whatsapp_verified: whatsappVerified,
         source: formData.source || null,
-        integration_start_time: formData.integration_start_time ? `${formData.integration_start_time}:00+00` : null,
+        integration_start_time: formData.integration_start_time
+          ? `${formData.integration_start_time}:00+00`
+          : null,
         payment_amount: paymentAmount,
         ai_interaction_id: formData.ai_interaction_id || null,
         payment_link_url: paymentData.payment_link_url || null,
@@ -491,7 +634,9 @@ const LeadForm = () => {
         notes: formData.notes || null,
         industry: formData.industry || null,
         annual_revenue: annualRevenue,
-        number_of_employees: formData.number_of_employees ? parseInt(formData.number_of_employees) : null,
+        number_of_employees: formData.number_of_employees
+          ? parseInt(formData.number_of_employees)
+          : null,
         custom_values: formatCustomValuesForSave(),
         ...(isEdit ? {} : { organization_id: organization?.id }),
       };
@@ -505,31 +650,62 @@ const LeadForm = () => {
           console.error("Update error:", error);
           throw error;
         }
+        await valueTypeRepository.replaceEntriesForLead(
+          id,
+          buildValueEntriesForSave()
+        );
 
         if (whatsappVerified) {
-          toast.success("Lead atualizado com sucesso! ✅ WhatsApp verificado - pronto para agendar interações.");
+          toast.success(
+            "Lead atualizado com sucesso! ✅ WhatsApp verificado - pronto para agendar interações."
+          );
         } else if (cleanedPhone && !hasInstance) {
-          toast.success("Lead atualizado com sucesso! ⚠️ Para validar o WhatsApp e agendar interações, configure uma instância WhatsApp conectada na organização.");
+          toast.success(
+            "Lead atualizado com sucesso! ⚠️ Para validar o WhatsApp e agendar interações, configure uma instância WhatsApp conectada na organização."
+          );
         } else if (cleanedPhone) {
-          toast.success("Lead atualizado com sucesso! ⚠️ WhatsApp não verificado. Você pode validar posteriormente na lista de leads.");
+          toast.success(
+            "Lead atualizado com sucesso! ⚠️ WhatsApp não verificado. Você pode validar posteriormente na lista de leads."
+          );
         } else {
-          toast.success("Lead atualizado com sucesso! ⚠️ Para agendar interações, adicione um WhatsApp válido.");
+          toast.success(
+            "Lead atualizado com sucesso! ⚠️ Para agendar interações, adicione um WhatsApp válido."
+          );
         }
       } else {
-        const { error } = await supabase.from("leads").insert([leadData]);
+        const { data: inserted, error } = await supabase
+          .from("leads")
+          .insert([leadData])
+          .select("id")
+          .single();
         if (error) {
           console.error("Insert error:", error);
           throw error;
         }
+        const leadId = inserted?.id;
+        if (leadId) {
+          await valueTypeRepository.replaceEntriesForLead(
+            leadId,
+            buildValueEntriesForSave()
+          );
+        }
 
         if (whatsappVerified) {
-          toast.success("Lead criado com sucesso! ✅ WhatsApp verificado - pronto para agendar interações.");
+          toast.success(
+            "Lead criado com sucesso! ✅ WhatsApp verificado - pronto para agendar interações."
+          );
         } else if (cleanedPhone && !hasInstance) {
-          toast.success("Lead criado com sucesso! ⚠️ Para validar o WhatsApp e agendar interações, configure uma instância WhatsApp conectada na organização.");
+          toast.success(
+            "Lead criado com sucesso! ⚠️ Para validar o WhatsApp e agendar interações, configure uma instância WhatsApp conectada na organização."
+          );
         } else if (cleanedPhone) {
-          toast.success("Lead criado com sucesso! ⚠️ WhatsApp não verificado. Você pode validar posteriormente na lista de leads.");
+          toast.success(
+            "Lead criado com sucesso! ⚠️ WhatsApp não verificado. Você pode validar posteriormente na lista de leads."
+          );
         } else {
-          toast.success("Lead criado com sucesso! ⚠️ Para agendar interações, adicione um WhatsApp válido.");
+          toast.success(
+            "Lead criado com sucesso! ⚠️ Para agendar interações, adicione um WhatsApp válido."
+          );
         }
       }
 
@@ -569,18 +745,23 @@ const LeadForm = () => {
       : 0;
 
     if (!amount || amount <= 0) {
-      toast.error("Defina um valor válido para a proposta antes de gerar o link");
+      toast.error(
+        "Defina um valor válido para a proposta antes de gerar o link"
+      );
       return;
     }
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-payment-link", {
-        body: {
-          leadId: id,
-          paymentAmount: amount
-        },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "create-payment-link",
+        {
+          body: {
+            leadId: id,
+            paymentAmount: amount,
+          },
+        }
+      );
 
       if (error) throw error;
 
@@ -592,7 +773,7 @@ const LeadForm = () => {
 
       await fetchLead();
 
-      window.open(data.url, '_blank');
+      window.open(data.url, "_blank");
       toast.success("Checkout aberto! Complete o pagamento na nova aba.");
     } catch (error: any) {
       toast.error("Erro ao gerar checkout de pagamento");
@@ -614,19 +795,23 @@ const LeadForm = () => {
       const cleanedPhone = cleanPhoneNumber(formData.contact_whatsapp);
 
       if (cleanedPhone.length < 10 || cleanedPhone.length > 13) {
-        toast.error("Número de WhatsApp inválido. Use formato: (11) 99999-9999");
+        toast.error(
+          "Número de WhatsApp inválido. Use formato: (11) 99999-9999"
+        );
         setIsValidatingWhatsApp(false);
         return;
       }
 
-      const { data: checkData, error: checkError } = await supabase.functions.invoke('evolution-check-whatsapp', {
-        body: { numbers: [cleanedPhone] }
-      });
+      const { data: checkData, error: checkError } =
+        await supabase.functions.invoke("evolution-check-whatsapp", {
+          body: { numbers: [cleanedPhone] },
+        });
 
       if (checkError) {
         console.error("Error checking WhatsApp:", checkError);
 
-        const isNoInstanceError = checkError.message?.includes("No connected WhatsApp instance") ||
+        const isNoInstanceError =
+          checkError.message?.includes("No connected WhatsApp instance") ||
           checkError.message?.includes("connected WhatsApp instance");
 
         if (isNoInstanceError) {
@@ -635,7 +820,10 @@ const LeadForm = () => {
           return;
         }
 
-        toast.error("Erro ao validar WhatsApp: " + (checkError.message || "Erro desconhecido"));
+        toast.error(
+          "Erro ao validar WhatsApp: " +
+            (checkError.message || "Erro desconhecido")
+        );
         setIsValidatingWhatsApp(false);
         return;
       }
@@ -648,7 +836,7 @@ const LeadForm = () => {
             .from("leads")
             .update({
               remote_jid: remoteJid,
-              whatsapp_verified: true
+              whatsapp_verified: true,
             })
             .eq("id", id);
 
@@ -661,18 +849,26 @@ const LeadForm = () => {
 
           setLeadRemoteJid(remoteJid);
           setLeadWhatsappVerified(true);
-          toast.success("WhatsApp validado com sucesso! ✅ Agora é possível agendar interações.");
+          toast.success(
+            "WhatsApp validado com sucesso! ✅ Agora é possível agendar interações."
+          );
         } else {
           setLeadRemoteJid(remoteJid);
           setLeadWhatsappVerified(true);
-          toast.success("WhatsApp validado! ✅ O remote_jid será salvo quando você salvar o lead.");
+          toast.success(
+            "WhatsApp validado! ✅ O remote_jid será salvo quando você salvar o lead."
+          );
         }
       } else {
-        toast.warning("Este número não está registrado no WhatsApp. Verifique se o número está correto.");
+        toast.warning(
+          "Este número não está registrado no WhatsApp. Verifique se o número está correto."
+        );
       }
     } catch (error: any) {
       console.error("Error validating WhatsApp:", error);
-      toast.error("Erro ao validar WhatsApp: " + (error.message || "Erro desconhecido"));
+      toast.error(
+        "Erro ao validar WhatsApp: " + (error.message || "Erro desconhecido")
+      );
     } finally {
       setIsValidatingWhatsApp(false);
     }
@@ -680,9 +876,33 @@ const LeadForm = () => {
 
   const formProgress = calculateFormProgress();
   const brazilianStates = [
-    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
-    "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
-    "RS", "RO", "RR", "SC", "SP", "SE", "TO"
+    "AC",
+    "AL",
+    "AP",
+    "AM",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MT",
+    "MS",
+    "MG",
+    "PA",
+    "PB",
+    "PR",
+    "PE",
+    "PI",
+    "RJ",
+    "RN",
+    "RS",
+    "RO",
+    "RR",
+    "SC",
+    "SP",
+    "SE",
+    "TO",
   ];
 
   return (
@@ -704,7 +924,9 @@ const LeadForm = () => {
                 )}
               </h1>
               <p className="text-muted-foreground">
-                {isEdit ? "Atualize as informações do lead" : "Adicione um novo lead ao sistema"}
+                {isEdit
+                  ? "Atualize as informações do lead"
+                  : "Adicione um novo lead ao sistema"}
               </p>
             </div>
           </div>
@@ -713,8 +935,12 @@ const LeadForm = () => {
         <Card className="p-6 space-y-4 border-2">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Progresso do Formulário</Label>
-              <span className="text-sm text-muted-foreground">{formProgress}%</span>
+              <Label className="text-sm font-medium">
+                Progresso do Formulário
+              </Label>
+              <span className="text-sm text-muted-foreground">
+                {formProgress}%
+              </span>
             </div>
             <Progress value={formProgress} className="h-2" />
             <p className="text-xs text-muted-foreground">
@@ -724,7 +950,11 @@ const LeadForm = () => {
         </Card>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="basic" className="gap-2">
                 <User className="w-4 h-4" />
@@ -748,7 +978,10 @@ const LeadForm = () => {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="basic" className="space-y-6 mt-6 animate-fade-in">
+            <TabsContent
+              value="basic"
+              className="space-y-6 mt-6 animate-fade-in"
+            >
               <Card className="p-6 space-y-6">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <User className="w-5 h-5 text-primary" />
@@ -761,7 +994,9 @@ const LeadForm = () => {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                       required
                       placeholder="Nome do lead"
                       className="transition-all focus:scale-[1.02]"
@@ -772,7 +1007,9 @@ const LeadForm = () => {
                     <Input
                       id="job_title"
                       value={formData.job_title}
-                      onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, job_title: e.target.value })
+                      }
                       placeholder="Ex: Gerente de Vendas"
                       className="transition-all focus:scale-[1.02]"
                     />
@@ -784,7 +1021,12 @@ const LeadForm = () => {
                     <Label htmlFor="category">Categoria</Label>
                     <Select
                       value={formData.category || "none"}
-                      onValueChange={(value) => setFormData({ ...formData, category: value === "none" ? "" : value })}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          category: value === "none" ? "" : value,
+                        })
+                      }
                     >
                       <SelectTrigger className="transition-all focus:scale-[1.02]">
                         <SelectValue placeholder="Selecione uma categoria" />
@@ -803,7 +1045,9 @@ const LeadForm = () => {
                     <Label htmlFor="status">Status *</Label>
                     <Select
                       value={formData.status}
-                      onValueChange={(value) => setFormData({ ...formData, status: value })}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, status: value })
+                      }
                     >
                       <SelectTrigger className="transition-all focus:scale-[1.02]">
                         <SelectValue />
@@ -814,11 +1058,14 @@ const LeadForm = () => {
                             {status.label}
                           </SelectItem>
                         ))}
-                        {!statusOptions.find(option => option.id === formData.status) && formData.status && (
-                          <SelectItem value={formData.status}>
-                            {formData.status}
-                          </SelectItem>
-                        )}
+                        {!statusOptions.find(
+                          (option) => option.id === formData.status
+                        ) &&
+                          formData.status && (
+                            <SelectItem value={formData.status}>
+                              {formData.status}
+                            </SelectItem>
+                          )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -829,7 +1076,9 @@ const LeadForm = () => {
                   <Textarea
                     id="description"
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
                     placeholder="Descreva o lead..."
                     rows={4}
                     className="transition-all focus:scale-[1.01]"
@@ -841,7 +1090,9 @@ const LeadForm = () => {
                   <Input
                     id="source"
                     value={formData.source}
-                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, source: e.target.value })
+                    }
                     placeholder="Ex: Google Ads, Indicação, LinkedIn..."
                     className="transition-all focus:scale-[1.02]"
                   />
@@ -849,11 +1100,16 @@ const LeadForm = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="company" className="space-y-6 mt-6 animate-fade-in">
+            <TabsContent
+              value="company"
+              className="space-y-6 mt-6 animate-fade-in"
+            >
               <Card className="p-6 space-y-6">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <Building2 className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Informações da Empresa</h3>
+                  <h3 className="text-lg font-semibold">
+                    Informações da Empresa
+                  </h3>
                 </div>
 
                 <div className="space-y-2">
@@ -861,7 +1117,9 @@ const LeadForm = () => {
                   <Input
                     id="company_name"
                     value={formData.company_name}
-                    onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, company_name: e.target.value })
+                    }
                     placeholder="Nome da empresa do lead"
                     className="transition-all focus:scale-[1.02]"
                   />
@@ -873,7 +1131,9 @@ const LeadForm = () => {
                     <Input
                       id="industry"
                       value={formData.industry}
-                      onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, industry: e.target.value })
+                      }
                       placeholder="Ex: Tecnologia, Varejo, Serviços..."
                       className="transition-all focus:scale-[1.02]"
                     />
@@ -886,7 +1146,9 @@ const LeadForm = () => {
                         id="website"
                         type="url"
                         value={formData.website}
-                        onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, website: e.target.value })
+                        }
                         placeholder="https://exemplo.com"
                         className="pl-10 transition-all focus:scale-[1.02]"
                       />
@@ -914,7 +1176,10 @@ const LeadForm = () => {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           });
-                          setFormData({ ...formData, annual_revenue: formatted });
+                          setFormData({
+                            ...formData,
+                            annual_revenue: formatted,
+                          });
                         }}
                         placeholder="0,00"
                         className="pl-10 transition-all focus:scale-[1.02]"
@@ -922,14 +1187,21 @@ const LeadForm = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="number_of_employees">Número de Funcionários</Label>
+                    <Label htmlFor="number_of_employees">
+                      Número de Funcionários
+                    </Label>
                     <div className="relative">
                       <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="number_of_employees"
                         type="number"
                         value={formData.number_of_employees}
-                        onChange={(e) => setFormData({ ...formData, number_of_employees: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            number_of_employees: e.target.value,
+                          })
+                        }
                         placeholder="Ex: 50"
                         min="0"
                         className="pl-10 transition-all focus:scale-[1.02]"
@@ -940,11 +1212,16 @@ const LeadForm = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="contact" className="space-y-6 mt-6 animate-fade-in">
+            <TabsContent
+              value="contact"
+              className="space-y-6 mt-6 animate-fade-in"
+            >
               <Card className="p-6 space-y-6">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <Phone className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Informações de Contato</h3>
+                  <h3 className="text-lg font-semibold">
+                    Informações de Contato
+                  </h3>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -956,7 +1233,12 @@ const LeadForm = () => {
                         id="contact_email"
                         type="email"
                         value={formData.contact_email}
-                        onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            contact_email: e.target.value,
+                          })
+                        }
                         placeholder="email@exemplo.com"
                         className="pl-10 transition-all focus:scale-[1.02]"
                       />
@@ -968,7 +1250,11 @@ const LeadForm = () => {
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="phone"
-                        value={formData.phone ? formatPhoneDisplay(formData.phone) : ""}
+                        value={
+                          formData.phone
+                            ? formatPhoneDisplay(formData.phone)
+                            : ""
+                        }
                         onChange={(e) => {
                           const cleaned = cleanPhoneNumber(e.target.value);
                           setFormData({ ...formData, phone: cleaned });
@@ -987,7 +1273,11 @@ const LeadForm = () => {
                     <MessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="contact_whatsapp"
-                      value={formData.contact_whatsapp ? formatPhoneDisplay(formData.contact_whatsapp) : ""}
+                      value={
+                        formData.contact_whatsapp
+                          ? formatPhoneDisplay(formData.contact_whatsapp)
+                          : ""
+                      }
                       onChange={(e) => {
                         const cleaned = cleanPhoneNumber(e.target.value);
                         setFormData({ ...formData, contact_whatsapp: cleaned });
@@ -1006,37 +1296,60 @@ const LeadForm = () => {
                       Importante para Agendar Interações
                     </AlertTitle>
                     <AlertDescription className="text-xs text-amber-700/90 dark:text-amber-400/90 mt-1">
-                      Para poder agendar interações com IA e iniciar conversas automáticas, este lead precisa ter:
+                      Para poder agendar interações com IA e iniciar conversas
+                      automáticas, este lead precisa ter:
                       <ul className="list-disc list-inside mt-1 space-y-0.5">
                         <li>WhatsApp válido e verificado</li>
-                        <li>Remote JID configurado (gerado automaticamente quando o número é verificado)</li>
+                        <li>
+                          Remote JID configurado (gerado automaticamente quando
+                          o número é verificado)
+                        </li>
                       </ul>
-                      {isEdit && formData.contact_whatsapp && (!leadRemoteJid || !leadWhatsappVerified) && (
-                        <div className="mt-2 pt-2 border-t border-amber-500/30">
-                          <p className="mb-2 font-medium">WhatsApp não verificado</p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleValidateWhatsApp}
-                            disabled={isValidatingWhatsApp}
-                            className="w-full gap-2 border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
-                          >
-                            <RefreshCw className={cn("w-4 h-4", isValidatingWhatsApp && "animate-spin")} />
-                            {isValidatingWhatsApp ? "Validando..." : "Validar WhatsApp Agora"}
-                          </Button>
-                        </div>
-                      )}
+                      {isEdit &&
+                        formData.contact_whatsapp &&
+                        (!leadRemoteJid || !leadWhatsappVerified) && (
+                          <div className="mt-2 pt-2 border-t border-amber-500/30">
+                            <p className="mb-2 font-medium">
+                              WhatsApp não verificado
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleValidateWhatsApp}
+                              disabled={isValidatingWhatsApp}
+                              className="w-full gap-2 border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                            >
+                              <RefreshCw
+                                className={cn(
+                                  "w-4 h-4",
+                                  isValidatingWhatsApp && "animate-spin"
+                                )}
+                              />
+                              {isValidatingWhatsApp
+                                ? "Validando..."
+                                : "Validar WhatsApp Agora"}
+                            </Button>
+                          </div>
+                        )}
                       {isEdit && leadRemoteJid && leadWhatsappVerified && (
                         <div className="mt-2 pt-2 border-t border-amber-500/30">
                           <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
                             <CheckCircle className="w-4 h-4" />
-                            <span className="font-medium">WhatsApp verificado e pronto para agendar interações</span>
+                            <span className="font-medium">
+                              WhatsApp verificado e pronto para agendar
+                              interações
+                            </span>
                           </div>
                         </div>
                       )}
                       {!isEdit && (
-                        <p className="mt-2">O sistema tentará validar o número automaticamente ao salvar. Se a validação falhar, o lead poderá ser salvo, mas não será possível agendar interações até que o WhatsApp seja verificado.</p>
+                        <p className="mt-2">
+                          O sistema tentará validar o número automaticamente ao
+                          salvar. Se a validação falhar, o lead poderá ser
+                          salvo, mas não será possível agendar interações até
+                          que o WhatsApp seja verificado.
+                        </p>
                       )}
                     </AlertDescription>
                   </Alert>
@@ -1050,7 +1363,12 @@ const LeadForm = () => {
                       id="linkedin_url"
                       type="url"
                       value={formData.linkedin_url}
-                      onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          linkedin_url: e.target.value,
+                        })
+                      }
                       placeholder="https://linkedin.com/in/usuario"
                       className="pl-10 transition-all focus:scale-[1.02]"
                     />
@@ -1059,7 +1377,10 @@ const LeadForm = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="location" className="space-y-6 mt-6 animate-fade-in">
+            <TabsContent
+              value="location"
+              className="space-y-6 mt-6 animate-fade-in"
+            >
               <Card className="p-6 space-y-6">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <MapPin className="w-5 h-5 text-primary" />
@@ -1071,7 +1392,9 @@ const LeadForm = () => {
                   <Input
                     id="address"
                     value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, address: e.target.value })
+                    }
                     placeholder="Rua, número, complemento"
                     className="transition-all focus:scale-[1.02]"
                   />
@@ -1083,7 +1406,9 @@ const LeadForm = () => {
                     <Input
                       id="city"
                       value={formData.city}
-                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, city: e.target.value })
+                      }
                       placeholder="São Paulo"
                       className="transition-all focus:scale-[1.02]"
                     />
@@ -1092,7 +1417,9 @@ const LeadForm = () => {
                     <Label htmlFor="state">Estado</Label>
                     <Select
                       value={formData.state || undefined}
-                      onValueChange={(value) => setFormData({ ...formData, state: value })}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, state: value })
+                      }
                     >
                       <SelectTrigger className="transition-all focus:scale-[1.02]">
                         <SelectValue placeholder="Selecione o estado" />
@@ -1113,9 +1440,10 @@ const LeadForm = () => {
                       value={formData.zip_code}
                       onChange={(e) => {
                         const value = e.target.value.replace(/\D/g, "");
-                        const formatted = value.length > 5 
-                          ? `${value.slice(0, 5)}-${value.slice(5, 8)}`
-                          : value;
+                        const formatted =
+                          value.length > 5
+                            ? `${value.slice(0, 5)}-${value.slice(5, 8)}`
+                            : value;
                         setFormData({ ...formData, zip_code: formatted });
                       }}
                       placeholder="00000-000"
@@ -1130,7 +1458,9 @@ const LeadForm = () => {
                   <Input
                     id="country"
                     value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, country: e.target.value })
+                    }
                     placeholder="Brasil"
                     className="transition-all focus:scale-[1.02]"
                   />
@@ -1138,11 +1468,16 @@ const LeadForm = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="advanced" className="space-y-6 mt-6 animate-fade-in">
+            <TabsContent
+              value="advanced"
+              className="space-y-6 mt-6 animate-fade-in"
+            >
               <Card className="p-6 space-y-6">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <Sparkles className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Configurações Avançadas</h3>
+                  <h3 className="text-lg font-semibold">
+                    Configurações Avançadas
+                  </h3>
                 </div>
 
                 <div className="space-y-2">
@@ -1153,7 +1488,9 @@ const LeadForm = () => {
                   </Label>
                   <Select
                     value={getSelectedAIInteractionId()}
-                    onValueChange={(value) => setFormData({ ...formData, ai_interaction_id: value })}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, ai_interaction_id: value })
+                    }
                   >
                     <SelectTrigger className="transition-all focus:scale-[1.02]">
                       <SelectValue placeholder="Selecione uma configuração" />
@@ -1168,19 +1505,26 @@ const LeadForm = () => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {defaultAIInteractionId 
+                    {defaultAIInteractionId
                       ? "A configuração padrão será usada se nenhuma for selecionada"
                       : "Configure uma configuração padrão em Settings > Configuração de IA"}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="integration_start_time">Horário de Integração (n8n)</Label>
+                  <Label htmlFor="integration_start_time">
+                    Horário de Integração (n8n)
+                  </Label>
                   <Input
                     id="integration_start_time"
                     type="time"
                     value={formData.integration_start_time}
-                    onChange={(e) => setFormData({ ...formData, integration_start_time: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration_start_time: e.target.value,
+                      })
+                    }
                     className="transition-all focus:scale-[1.02]"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -1219,11 +1563,50 @@ const LeadForm = () => {
                   </p>
                 </div>
 
+                {valueTypes.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-4">
+                      <Label className="text-base font-semibold">
+                        Valores para métricas financeiras
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Preencha os valores cadastrados em Tipos de Valor. Eles
+                        serão usados no dashboard.
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {valueTypes.map((vt) => (
+                          <div key={vt.id} className="space-y-2">
+                            <Label htmlFor={`value-entry-${vt.id}`}>
+                              {vt.name}
+                            </Label>
+                            <div className="relative">
+                              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                              <Input
+                                id={`value-entry-${vt.id}`}
+                                type="text"
+                                value={valueEntries[vt.id] ?? ""}
+                                onChange={(e) =>
+                                  updateValueEntry(vt.id, e.target.value)
+                                }
+                                placeholder="0,00"
+                                className="pl-10"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 <Separator />
 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">Valores Personalizados</Label>
+                    <Label className="text-base font-semibold">
+                      Valores Personalizados
+                    </Label>
                     <Button
                       type="button"
                       variant="outline"
@@ -1236,14 +1619,19 @@ const LeadForm = () => {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Defina valores personalizados com descrições para este lead (ex: valor inicial, desconto, adicional, etc.)
+                    Defina valores personalizados com descrições para este lead
+                    (ex: valor inicial, desconto, adicional, etc.)
                   </p>
 
                   {customValues.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
                       <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">Nenhum valor personalizado adicionado</p>
-                      <p className="text-xs mt-1">Clique em "Adicionar Valor" para começar</p>
+                      <p className="text-sm">
+                        Nenhum valor personalizado adicionado
+                      </p>
+                      <p className="text-xs mt-1">
+                        Clique em "Adicionar Valor" para começar
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -1251,26 +1639,42 @@ const LeadForm = () => {
                         <Card key={index} className="p-4 border-2">
                           <div className="grid gap-4 md:grid-cols-[1fr_2fr_auto] items-end">
                             <div className="space-y-2">
-                              <Label htmlFor={`custom-value-${index}`}>Valor (R$)</Label>
+                              <Label htmlFor={`custom-value-${index}`}>
+                                Valor (R$)
+                              </Label>
                               <div className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                   id={`custom-value-${index}`}
                                   type="text"
                                   value={item.value}
-                                  onChange={(e) => updateCustomValue(index, "value", e.target.value)}
+                                  onChange={(e) =>
+                                    updateCustomValue(
+                                      index,
+                                      "value",
+                                      e.target.value
+                                    )
+                                  }
                                   placeholder="0,00"
                                   className="pl-10 transition-all focus:scale-[1.02]"
                                 />
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor={`custom-description-${index}`}>Descrição</Label>
+                              <Label htmlFor={`custom-description-${index}`}>
+                                Descrição
+                              </Label>
                               <Input
                                 id={`custom-description-${index}`}
                                 type="text"
                                 value={item.description}
-                                onChange={(e) => updateCustomValue(index, "description", e.target.value)}
+                                onChange={(e) =>
+                                  updateCustomValue(
+                                    index,
+                                    "description",
+                                    e.target.value
+                                  )
+                                }
                                 placeholder="Ex: Valor inicial, Desconto, Adicional..."
                                 className="transition-all focus:scale-[1.02]"
                               />
@@ -1298,7 +1702,9 @@ const LeadForm = () => {
                   <Textarea
                     id="notes"
                     value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, notes: e.target.value })
+                    }
                     placeholder="Anotações importantes sobre este lead..."
                     rows={5}
                     className="transition-all focus:scale-[1.01]"
@@ -1330,7 +1736,9 @@ const LeadForm = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
                     <span className="text-sm font-medium">Status:</span>
-                    <span className="text-sm capitalize">{paymentData.payment_status.replace("_", " ")}</span>
+                    <span className="text-sm capitalize">
+                      {paymentData.payment_status.replace("_", " ")}
+                    </span>
                   </div>
                   {paymentData.payment_link_url && (
                     <a
@@ -1358,7 +1766,12 @@ const LeadForm = () => {
           )}
 
           <div className="flex items-center gap-3 pb-6">
-            <Button type="submit" disabled={loading} className="flex-1" size="lg">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="flex-1"
+              size="lg"
+            >
               <Save className="w-4 h-4 mr-2" />
               {isEdit ? "Salvar Alterações" : "Criar Lead"}
             </Button>
@@ -1378,7 +1791,10 @@ const LeadForm = () => {
         </form>
       </div>
 
-      <AlertDialog open={showWhatsAppDialog} onOpenChange={setShowWhatsAppDialog}>
+      <AlertDialog
+        open={showWhatsAppDialog}
+        onOpenChange={setShowWhatsAppDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -1386,11 +1802,10 @@ const LeadForm = () => {
               WhatsApp Não Configurado
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
+              <p>Não há nenhuma instância WhatsApp conectada no momento.</p>
               <p>
-                Não há nenhuma instância WhatsApp conectada no momento.
-              </p>
-              <p>
-                Para validar números de WhatsApp e enviar mensagens automáticas, você precisa:
+                Para validar números de WhatsApp e enviar mensagens automáticas,
+                você precisa:
               </p>
               <ul className="list-disc list-inside space-y-1 ml-2">
                 <li>Criar uma instância WhatsApp</li>
@@ -1398,15 +1813,18 @@ const LeadForm = () => {
                 <li>Aguardar a conexão ser estabelecida</li>
               </ul>
               <p className="mt-3 font-medium">
-                Deseja configurar o WhatsApp agora ou cadastrar o lead sem validação?
+                Deseja configurar o WhatsApp agora ou cadastrar o lead sem
+                validação?
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setShowWhatsAppDialog(false);
-              setLoading(false);
-            }}>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowWhatsAppDialog(false);
+                setLoading(false);
+              }}
+            >
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
