@@ -1,8 +1,22 @@
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Mail, Phone, Clock, DollarSign, CheckCircle, MessageCircle, RefreshCw, AlertTriangle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Mail,
+  Phone,
+  Clock,
+  DollarSign,
+  CheckCircle,
+  MessageCircle,
+  RefreshCw,
+  AlertTriangle,
+} from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useSortable } from "@dnd-kit/sortable";
@@ -10,7 +24,11 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState } from "react";
-import { formatWhatsAppNumber, formatPhoneDisplay, cleanPhoneNumber } from "@/lib/utils";
+import {
+  formatWhatsAppNumber,
+  formatPhoneDisplay,
+  cleanPhoneNumber,
+} from "@/lib/utils";
 import { MessagePreviewDialog } from "@/components/MessagePreviewDialog";
 
 type Lead = {
@@ -50,7 +68,9 @@ export const LeadCard = ({
   const [previewMessage, setPreviewMessage] = useState("");
   const [previewImageUrl, setPreviewImageUrl] = useState<string | undefined>();
   const [previewSettings, setPreviewSettings] = useState<any>(null);
-  const [previewInstanceName, setPreviewInstanceName] = useState<string | null>(null);
+  const [previewInstanceName, setPreviewInstanceName] = useState<string | null>(
+    null
+  );
   const [availableInstances, setAvailableInstances] = useState<any[]>([]);
   const [isValidatingWhatsApp, setIsValidatingWhatsApp] = useState(false);
 
@@ -101,22 +121,27 @@ export const LeadCard = ({
       }
 
       if (!whatsappInstances || whatsappInstances.length === 0) {
-        toast.error("Nenhuma instância WhatsApp conectada. Configure em WhatsApp > Conectar", {
-          duration: 5000,
-          action: {
-            label: "Configurar",
-            onClick: () => {
-              window.location.href = "/whatsapp";
+        toast.error(
+          "Nenhuma instância WhatsApp conectada. Configure em WhatsApp > Conectar",
+          {
+            duration: 5000,
+            action: {
+              label: "Configurar",
+              onClick: () => {
+                window.location.href = "/whatsapp";
+              },
             },
-          },
-        });
+          }
+        );
         return;
       }
 
       setAvailableInstances(whatsappInstances);
 
       // Usa mensagem e imagem configuradas ou fallback para as padrões
-      const message = settings?.default_message || `👋 Oi! Tudo bem?
+      const message =
+        settings?.default_message ||
+        `👋 Oi! Tudo bem?
 Aqui é a equipe da Artemis Digital Solutions e temos uma oferta especial de Black Friday para impulsionar suas vendas e organizar seu atendimento nesse período de alta demanda.
 
 🤖 O que é um chatbot?
@@ -147,16 +172,22 @@ Coleta nome, WhatsApp, interesse e entrega tudo prontinho para você.
 Se quiser saber mais, é só acessar:
 🌐 www.artemisdigital.tech`;
 
-      const imageUrl = settings?.default_image_url && settings.default_image_url.startsWith('http')
-        ? settings.default_image_url
-        : undefined;
+      const imageUrl =
+        settings?.default_image_url &&
+        settings.default_image_url.startsWith("http")
+          ? settings.default_image_url
+          : undefined;
 
       // Armazena dados para uso posterior na confirmação
       setPreviewMessage(message);
       setPreviewImageUrl(imageUrl);
       setPreviewSettings(settings);
       // Define a primeira instância como padrão se houver apenas uma, caso contrário será selecionada pelo usuário
-      setPreviewInstanceName(whatsappInstances.length === 1 ? whatsappInstances[0].instance_name : null);
+      setPreviewInstanceName(
+        whatsappInstances.length === 1
+          ? whatsappInstances[0].instance_name
+          : null
+      );
       setShowPreview(true);
     } catch (error: any) {
       toast.error("Erro ao carregar preview da mensagem");
@@ -176,7 +207,9 @@ Se quiser saber mais, é só acessar:
       }
 
       if (!lead.remote_jid) {
-        toast.error("Lead não possui remoteJid válido. Por favor, recrie o lead.");
+        toast.error(
+          "Lead não possui remoteJid válido. Por favor, recrie o lead."
+        );
         setIsStartingConversation(false);
         return;
       }
@@ -184,14 +217,15 @@ Se quiser saber mais, é só acessar:
       const remoteJid = lead.remote_jid;
 
       // Envia a mensagem primeiro
-      const { data: sendData, error: sendError } = await supabase.functions.invoke("evolution-send-message", {
-        body: {
-          instanceName: previewInstanceName,
-          remoteJid,
-          message: previewMessage,
-          imageUrl: previewImageUrl
-        }
-      });
+      const { data: sendData, error: sendError } =
+        await supabase.functions.invoke("evolution-send-message", {
+          body: {
+            instanceName: previewInstanceName,
+            remoteJid,
+            message: previewMessage,
+            imageUrl: previewImageUrl,
+          },
+        });
 
       // Verifica se há erro na resposta da função
       if (sendError) {
@@ -203,8 +237,9 @@ Se quiser saber mais, é só acessar:
       }
 
       // Verifica se a resposta contém um erro
-      if (sendData && typeof sendData === 'object' && 'error' in sendData) {
-        const errorMessage = (sendData as any).error || "Erro ao enviar mensagem";
+      if (sendData && typeof sendData === "object" && "error" in sendData) {
+        const errorMessage =
+          (sendData as any).error || "Erro ao enviar mensagem";
         console.error("Erro na resposta da função:", errorMessage);
         toast.error(errorMessage);
         setIsStartingConversation(false);
@@ -216,19 +251,25 @@ Se quiser saber mais, é só acessar:
         .from("leads")
         .update({
           status: "conversa_iniciada",
-          whatsapp_verified: true
+          whatsapp_verified: true,
         })
         .eq("id", lead.id);
 
       if (updateError) {
         console.error("Erro ao atualizar status do lead:", updateError);
-        toast.error("Mensagem enviada, mas houve erro ao atualizar o status do lead");
+        toast.error(
+          "Mensagem enviada, mas houve erro ao atualizar o status do lead"
+        );
         setIsStartingConversation(false);
         return;
       }
 
       // Atualiza o lead localmente
-      const updatedLead = { ...lead, status: "conversa_iniciada", whatsapp_verified: true };
+      const updatedLead = {
+        ...lead,
+        status: "conversa_iniciada",
+        whatsapp_verified: true,
+      };
       if (onLeadUpdate) {
         onLeadUpdate(updatedLead);
       }
@@ -246,8 +287,8 @@ Se quiser saber mais, é só acessar:
               whatsapp: lead.contact_whatsapp,
               category: lead.category,
               description: lead.description,
-              action: "start_conversation"
-            })
+              action: "start_conversation",
+            }),
           });
         } catch (webhookError) {
           console.error("Erro ao enviar webhook:", webhookError);
@@ -264,8 +305,10 @@ Se quiser saber mais, é só acessar:
     }
   };
 
-  const canStartConversation = lead.status === "novo" && (lead.contact_whatsapp || lead.contact_email);
-  const needsWhatsAppValidation = lead.contact_whatsapp && (!lead.remote_jid || !lead.whatsapp_verified);
+  const canStartConversation =
+    lead.status === "novo" && (lead.contact_whatsapp || lead.contact_email);
+  const needsWhatsAppValidation =
+    lead.contact_whatsapp && (!lead.remote_jid || !lead.whatsapp_verified);
 
   const handleValidateWhatsApp = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -280,29 +323,37 @@ Se quiser saber mais, é só acessar:
     try {
       const cleanedPhone = cleanPhoneNumber(lead.contact_whatsapp);
 
-      const { data: checkData, error: checkError } = await supabase.functions.invoke('evolution-check-whatsapp', {
-        body: { numbers: [cleanedPhone] }
-      });
+      const { data: checkData, error: checkError } =
+        await supabase.functions.invoke("evolution-check-whatsapp", {
+          body: { numbers: [cleanedPhone] },
+        });
 
       if (checkError) {
         console.error("Error checking WhatsApp:", checkError);
 
-        const isNoInstanceError = checkError.message?.includes("No connected WhatsApp instance") ||
+        const isNoInstanceError =
+          checkError.message?.includes("No connected WhatsApp instance") ||
           checkError.message?.includes("connected WhatsApp instance");
 
         if (isNoInstanceError) {
-          toast.error("Nenhuma instância WhatsApp conectada. Configure em WhatsApp > Conectar", {
-            duration: 5000,
-            action: {
-              label: "Configurar",
-              onClick: () => navigate("/whatsapp"),
-            },
-          });
+          toast.error(
+            "Nenhuma instância WhatsApp conectada. Configure em WhatsApp > Conectar",
+            {
+              duration: 5000,
+              action: {
+                label: "Configurar",
+                onClick: () => navigate("/whatsapp"),
+              },
+            }
+          );
           setIsValidatingWhatsApp(false);
           return;
         }
 
-        toast.error("Erro ao validar WhatsApp: " + (checkError.message || "Erro desconhecido"));
+        toast.error(
+          "Erro ao validar WhatsApp: " +
+            (checkError.message || "Erro desconhecido")
+        );
         setIsValidatingWhatsApp(false);
         return;
       }
@@ -314,7 +365,7 @@ Se quiser saber mais, é só acessar:
           .from("leads")
           .update({
             remote_jid: remoteJid,
-            whatsapp_verified: true
+            whatsapp_verified: true,
           })
           .eq("id", lead.id);
 
@@ -325,18 +376,28 @@ Se quiser saber mais, é só acessar:
           return;
         }
 
-        const updatedLead = { ...lead, remote_jid: remoteJid, whatsapp_verified: true };
+        const updatedLead = {
+          ...lead,
+          remote_jid: remoteJid,
+          whatsapp_verified: true,
+        };
         if (onLeadUpdate) {
           onLeadUpdate(updatedLead);
         }
 
-        toast.success("WhatsApp validado com sucesso! ✅ Agora é possível agendar interações.");
+        toast.success(
+          "WhatsApp validado com sucesso! ✅ Agora é possível agendar interações."
+        );
       } else {
-        toast.warning("Este número não está registrado no WhatsApp. Verifique se o número está correto.");
+        toast.warning(
+          "Este número não está registrado no WhatsApp. Verifique se o número está correto."
+        );
       }
     } catch (error: any) {
       console.error("Error validating WhatsApp:", error);
-      toast.error("Erro ao validar WhatsApp: " + (error.message || "Erro desconhecido"));
+      toast.error(
+        "Erro ao validar WhatsApp: " + (error.message || "Erro desconhecido")
+      );
     } finally {
       setIsValidatingWhatsApp(false);
     }
@@ -344,39 +405,88 @@ Se quiser saber mais, é só acessar:
 
   if (compact) {
     return (
-      <Card
-        ref={setNodeRef}
-        style={style}
-        {...attributesWithoutClassName}
-        {...listeners}
-        className="p-3 cursor-pointer hover:border-primary/50 transition-all hover:shadow-md group min-w-0 w-full overflow-hidden max-h-[100px] flex flex-col"
-        onClick={() => {
-          if (!isDragging && onClick) {
-            onClick(lead);
-          }
-        }}
-      >
-        <div className="flex flex-col gap-1.5 min-h-0">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <h3 className="font-medium text-sm group-hover:text-primary transition-colors truncate cursor-default">
-                  {lead.name}
-                </h3>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{lead.name}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <div className="flex items-center justify-between gap-2">
-            <StatusBadge status={lead.status as any} />
-            <span className="text-[10px] text-muted-foreground flex-shrink-0">
-              {format(new Date(lead.created_at), "dd/MM/yy", { locale: ptBR })}
-            </span>
+      <>
+        <Card
+          ref={setNodeRef}
+          style={style}
+          {...attributesWithoutClassName}
+          {...listeners}
+          className="p-3 cursor-pointer hover:border-primary/50 transition-all hover:shadow-md group min-w-0 w-full overflow-hidden flex flex-col"
+          onClick={() => {
+            if (!isDragging && onClick) {
+              onClick(lead);
+            }
+          }}
+        >
+          <div className="flex flex-col gap-1.5 min-h-0">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <h3 className="font-medium text-sm group-hover:text-primary transition-colors truncate cursor-default">
+                    {lead.name}
+                  </h3>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{lead.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <div className="flex items-center justify-between gap-2">
+              <StatusBadge status={lead.status as any} />
+              <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                {format(new Date(lead.created_at), "dd/MM/yy", {
+                  locale: ptBR,
+                })}
+              </span>
+            </div>
+            {(needsWhatsAppValidation || canStartConversation) && (
+              <div className="mt-2 flex gap-1.5">
+                {needsWhatsAppValidation && (
+                  <Button
+                    onClick={handleValidateWhatsApp}
+                    disabled={isValidatingWhatsApp}
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 flex-1 text-xs border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                  >
+                    <RefreshCw
+                      className={`w-3 h-3 flex-shrink-0 ${
+                        isValidatingWhatsApp ? "animate-spin" : ""
+                      }`}
+                    />
+                    <span className="truncate">Validar WhatsApp</span>
+                  </Button>
+                )}
+                {canStartConversation && (
+                  <>
+                    <Button
+                      onClick={handleShowPreview}
+                      disabled={isStartingConversation}
+                      size="sm"
+                      className="h-7 gap-1 flex-1 text-xs min-w-0"
+                    >
+                      <MessageCircle className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">Iniciar</span>
+                    </Button>
+                    <MessagePreviewDialog
+                      open={showPreview}
+                      onOpenChange={setShowPreview}
+                      onConfirm={handleConfirmSend}
+                      message={previewMessage}
+                      imageUrl={previewImageUrl}
+                      leadName={lead.name}
+                      isLoading={isStartingConversation}
+                      instances={availableInstances}
+                      selectedInstanceName={previewInstanceName}
+                      onInstanceChange={setPreviewInstanceName}
+                    />
+                  </>
+                )}
+              </div>
+            )}
           </div>
-        </div>
-      </Card>
+        </Card>
+      </>
     );
   }
 
@@ -415,7 +525,9 @@ Se quiser saber mais, é só acessar:
         <div className="flex-1 flex flex-col min-h-0">
           <div className="space-y-3">
             {lead.description && (
-              <p className="text-sm text-muted-foreground line-clamp-2 break-words overflow-hidden">{lead.description}</p>
+              <p className="text-sm text-muted-foreground line-clamp-2 break-words overflow-hidden">
+                {lead.description}
+              </p>
             )}
 
             <div className="flex flex-wrap gap-2">
@@ -439,26 +551,34 @@ Se quiser saber mais, é só acessar:
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Mail className="w-4 h-4 flex-shrink-0" />
-                  <span className="break-all min-w-0">{lead.contact_email}</span>
+                  <span className="break-all min-w-0">
+                    {lead.contact_email}
+                  </span>
                 </a>
               )}
               {lead.contact_whatsapp && (
                 <a
-                  href={`https://wa.me/${formatWhatsAppNumber(lead.contact_whatsapp)}?text=${encodeURIComponent(`Olá ${lead.name}! Tudo bem?`)}`}
+                  href={`https://wa.me/${formatWhatsAppNumber(
+                    lead.contact_whatsapp
+                  )}?text=${encodeURIComponent(`Olá ${lead.name}! Tudo bem?`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 hover:text-primary transition-colors min-w-0 flex-1 sm:flex-initial"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Phone className="w-4 h-4 flex-shrink-0" />
-                  <span className="break-all min-w-0">{formatPhoneDisplay(lead.contact_whatsapp)}</span>
+                  <span className="break-all min-w-0">
+                    {formatPhoneDisplay(lead.contact_whatsapp)}
+                  </span>
                 </a>
               )}
             </div>
 
             {lead.payment_amount && (
               <div className="flex flex-col p-2.5 bg-accent/10 rounded-md gap-1 min-w-0">
-                <span className="text-sm font-medium text-muted-foreground">Valor da Proposta:</span>
+                <span className="text-sm font-medium text-muted-foreground">
+                  Valor da Proposta:
+                </span>
                 <span className="text-lg font-bold text-accent">
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
@@ -472,7 +592,10 @@ Se quiser saber mais, é só acessar:
               <div className="flex items-center gap-2 p-2.5 bg-status-pago/10 rounded-md">
                 <CheckCircle className="w-4 h-4 text-status-pago flex-shrink-0" />
                 <span className="text-xs text-status-pago break-words min-w-0">
-                  Pago em {format(new Date(lead.paid_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                  Pago em{" "}
+                  {format(new Date(lead.paid_at), "dd/MM/yyyy 'às' HH:mm", {
+                    locale: ptBR,
+                  })}
                 </span>
               </div>
             )}
@@ -488,7 +611,11 @@ Se quiser saber mais, é só acessar:
                   className="w-full gap-2 border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
                   size="sm"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isValidatingWhatsApp ? "animate-spin" : ""}`} />
+                  <RefreshCw
+                    className={`w-4 h-4 ${
+                      isValidatingWhatsApp ? "animate-spin" : ""
+                    }`}
+                  />
                   {isValidatingWhatsApp ? "Validando..." : "Validar WhatsApp"}
                 </Button>
               )}
@@ -525,12 +652,18 @@ Se quiser saber mais, é só acessar:
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-4 mt-4 border-t border-border/50 gap-2">
           <div className="flex items-center gap-1 min-w-0">
             <Clock className="w-3 h-3 flex-shrink-0" />
-            <span className="whitespace-nowrap">{format(new Date(lead.created_at), "dd/MM/yyyy", { locale: ptBR })}</span>
+            <span className="whitespace-nowrap">
+              {format(new Date(lead.created_at), "dd/MM/yyyy", {
+                locale: ptBR,
+              })}
+            </span>
           </div>
           {lead.payment_status !== "nao_criado" && (
             <div className="flex items-center gap-1 text-accent min-w-0">
               <DollarSign className="w-3 h-3 flex-shrink-0" />
-              <span className="capitalize truncate">{lead.payment_status.replace("_", " ")}</span>
+              <span className="capitalize truncate">
+                {lead.payment_status.replace("_", " ")}
+              </span>
             </div>
           )}
         </div>

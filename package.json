@@ -1,8 +1,9 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "2.1.0-beta",
+  "version": "3.1.0-beta",
   "type": "module",
+  "packageManager": "yarn@1.22.22",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -52,6 +53,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "gsap": "^3.14.2",
     "input-otp": "^1.4.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.462.0",

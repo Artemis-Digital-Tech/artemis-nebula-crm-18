@@ -12,6 +12,7 @@ import LeadForm from "./pages/LeadForm";
 import Leads from "./pages/Leads";
 import Categories from "./pages/Categories";
 import CategoryManager from "./pages/CategoryManager";
+import ValueTypeManager from "./pages/ValueTypeManager";
 import StatusManager from "./pages/StatusManager";
 import LeadSearch from "./pages/LeadSearch";
 import Agents from "./pages/Agents";
@@ -84,6 +85,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <CategoryManager />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/value-types"
+              element={
+                <ProtectedRoute>
+                  <ValueTypeManager />
                 </ProtectedRoute>
               }
             />

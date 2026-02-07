@@ -72,6 +72,7 @@ import { ptBR } from "date-fns/locale";
 import { formatWhatsAppNumber, formatPhoneDisplay } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useOrganization } from "@/hooks/useOrganization";
+import { LeadValueTypeRepository } from "@/services/leadValueTypes";
 import {
   Dialog,
   DialogContent,
@@ -333,8 +334,12 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { organization } = useOrganization();
   const [leads, setLeads] = useState<any[]>([]);
+  const [leadValuesTotal, setLeadValuesTotal] = useState<
+    Record<string, number>
+  >({});
   const [totalLeads, setTotalLeads] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const valueTypeRepository = useMemo(() => new LeadValueTypeRepository(), []);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hasDefaultAI, setHasDefaultAI] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -469,6 +474,24 @@ const Dashboard = () => {
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
+
+  useEffect(() => {
+    if (leads.length === 0) {
+      setLeadValuesTotal({});
+      return;
+    }
+    const leadIds = leads.map((l) => l.id);
+    valueTypeRepository
+      .getEntriesByLeadIds(leadIds)
+      .then((entries) => {
+        const map: Record<string, number> = {};
+        entries.forEach((e) => {
+          map[e.lead_id] = (map[e.lead_id] ?? 0) + Number(e.value);
+        });
+        setLeadValuesTotal(map);
+      })
+      .catch(() => setLeadValuesTotal({}));
+  }, [leads, valueTypeRepository]);
 
   useEffect(() => {
     if (viewMode !== "kanban" || !organization?.id) {
@@ -635,23 +658,32 @@ const Dashboard = () => {
     };
   }, [filteredLeads, statusColumns]);
 
+  const getLeadValue = useCallback(
+    (lead: any) => {
+      const fromEntries = leadValuesTotal[lead.id];
+      if (fromEntries != null && fromEntries > 0) return fromEntries;
+      return lead.payment_amount ?? 0;
+    },
+    [leadValuesTotal]
+  );
+
   const financialStats = useMemo(
     () => ({
       totalValue: filteredLeads.reduce(
-        (sum, lead) => sum + (lead.payment_amount || 0),
+        (sum, lead) => sum + getLeadValue(lead),
         0
       ),
       paidValue: filteredLeads
         .filter((l) => l.status === "pago")
-        .reduce((sum, lead) => sum + (lead.payment_amount || 0), 0),
+        .reduce((sum, lead) => sum + getLeadValue(lead), 0),
       pendingValue: filteredLeads
         .filter(
           (l) =>
             l.payment_link_url && l.status !== "pago" && l.status !== "perdido"
         )
-        .reduce((sum, lead) => sum + (lead.payment_amount || 0), 0),
+        .reduce((sum, lead) => sum + getLeadValue(lead), 0),
     }),
-    [filteredLeads]
+    [filteredLeads, getLeadValue]
   );
 
   const toggleLeadSelection = (leadId: string) => {
