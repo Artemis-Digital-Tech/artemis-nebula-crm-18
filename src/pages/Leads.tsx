@@ -266,6 +266,33 @@ const Leads = () => {
     }
   };
 
+  const handleScheduleMessages = () => {
+    if (selectedIds.length === 0) {
+      toast.error("Selecione pelo menos um lead para agendar mensagens");
+      return;
+    }
+
+    const selectedLeadsData = filteredLeads.filter(lead => selectedIds.includes(lead.id));
+    const validLeads = selectedLeadsData.filter(lead =>
+      lead.contact_whatsapp && lead.remote_jid
+    );
+
+    if (validLeads.length === 0) {
+      toast.error("Nenhum lead válido selecionado. Os leads devem ter WhatsApp e remote_jid configurados.");
+      return;
+    }
+
+    if (validLeads.length < selectedIds.length) {
+      toast.warning(`${validLeads.length} de ${selectedIds.length} lead(s) são válidos para agendamento.`);
+    }
+
+    navigate("/schedule-messages", {
+      state: {
+        leads: validLeads,
+      },
+    });
+  };
+
   const handleBulkValidateWhatsApp = async () => {
     if (selectedIds.length === 0) {
       toast.error("Selecione pelo menos um lead para validar WhatsApp");
@@ -444,6 +471,14 @@ const Leads = () => {
                         >
                           <Bot className="w-4 h-4" />
                           Agendar Interações ({selectedIds.length})
+                        </Button>
+                        <Button
+                          variant="default"
+                          onClick={handleScheduleMessages}
+                          className="gap-2"
+                        >
+                          <Calendar className="w-4 h-4" />
+                          Agendar Mensagens ({selectedIds.length})
                         </Button>
                       </>
                     )}

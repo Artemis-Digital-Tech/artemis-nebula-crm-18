@@ -4,6 +4,8 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { RichTextarea } from "@/components/ui/rich-textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,10 +17,13 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatPhoneDisplay } from "@/lib/utils";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { formatLeadMessage } from "@/utils/messageTemplate";
 
 interface ScheduledMessage {
   leadId: string;
   leadName: string;
+  leadOrganization?: string;
   leadWhatsApp: string;
   remoteJid: string;
   scheduledDateTime: string;
@@ -61,12 +66,10 @@ const ScheduleMessages = () => {
   useEffect(() => {
     const loadData = async () => {
       if (activeTab !== "schedule") return;
-
       try {
         const state = location.state as { leads?: any[]; message?: string; imageUrl?: string; instanceName?: string };
 
         if (!state?.leads || state.leads.length === 0) {
-          setActiveTab("view");
           return;
         }
 
@@ -96,17 +99,29 @@ const ScheduleMessages = () => {
         const now = new Date();
         const scheduledLeads: ScheduledMessage[] = state.leads.map((lead, index) => {
           const scheduledDate = new Date(now);
-          scheduledDate.setMinutes(scheduledDate.getMinutes() + (index * 5));
+          scheduledDate.setMinutes(scheduledDate.getMinutes() + index * 5);
+
+          const leadOrganization =
+            lead.organization_name ||
+            lead.company ||
+            lead.company_name ||
+            undefined;
+
+          const formattedMessage = formatLeadMessage(message, {
+            leadName: lead.name,
+            organizationName: leadOrganization,
+          });
 
           return {
             leadId: lead.id,
             leadName: lead.name,
+            leadOrganization,
             leadWhatsApp: lead.contact_whatsapp,
             remoteJid: lead.remote_jid,
             scheduledDateTime: format(scheduledDate, "yyyy-MM-dd'T'HH:mm"),
-            message: message,
+            message: formattedMessage,
             imageUrl: imageUrl,
-            instanceName: instance
+            instanceName: instance,
           };
         });
 
@@ -142,20 +157,22 @@ const ScheduleMessages = () => {
 
       if (error) throw error;
 
-      const messagesWithLeadInfo: ScheduledMessageRow[] = (data || []).map((msg: any) => ({
-        id: msg.id,
-        lead_id: msg.lead_id,
-        lead_name: msg.leads?.name || "Lead não encontrado",
-        lead_whatsapp: msg.leads?.contact_whatsapp || "",
-        remote_jid: msg.remote_jid,
-        scheduled_at: msg.scheduled_at,
-        message: msg.message,
-        image_url: msg.image_url,
-        instance_name: msg.instance_name,
-        status: msg.status,
-        created_at: msg.created_at,
-        updated_at: msg.updated_at,
-      }));
+      const messagesWithLeadInfo: ScheduledMessageRow[] = (data || []).map(
+        (msg: any) => ({
+          id: msg.id,
+          lead_id: msg.lead_id,
+          lead_name: msg.leads?.name || "Lead não encontrado",
+          lead_whatsapp: msg.leads?.contact_whatsapp || "",
+          remote_jid: msg.remote_jid,
+          scheduled_at: msg.scheduled_at,
+          message: msg.message,
+          image_url: msg.image_url,
+          instance_name: msg.instance_name,
+          status: msg.status,
+          created_at: msg.created_at,
+          updated_at: msg.updated_at,
+        }),
+      );
 
       setScheduledMessages(messagesWithLeadInfo);
     } catch (error: any) {
@@ -294,15 +311,22 @@ const ScheduleMessages = () => {
     setSaving(true);
 
     try {
-      const scheduledMessages = leads.map(lead => ({
-        lead_id: lead.leadId,
-        instance_name: lead.instanceName,
-        remote_jid: lead.remoteJid,
-        message: lead.message,
-        image_url: lead.imageUrl,
-        scheduled_at: new Date(lead.scheduledDateTime).toISOString(),
-        status: "pending"
-      }));
+      const scheduledMessages = leads.map(lead => {
+        const formattedMessage = formatLeadMessage(lead.message, {
+          leadName: lead.leadName,
+          organizationName: lead.leadOrganization,
+        });
+
+        return {
+          lead_id: lead.leadId,
+          instance_name: lead.instanceName,
+          remote_jid: lead.remoteJid,
+          message: formattedMessage,
+          image_url: lead.imageUrl,
+          scheduled_at: new Date(lead.scheduledDateTime).toISOString(),
+          status: "pending",
+        };
+      });
 
       const { error: insertError } = await supabase
         .from("scheduled_messages")
@@ -313,7 +337,10 @@ const ScheduleMessages = () => {
       }
 
       toast.success(`${leads.length} mensagem(ns) agendada(s) com sucesso!`);
-      navigate("/dashboard");
+      // Após agendar, mostrar a lista de mensagens agendadas
+      setActiveTab("view");
+      await fetchScheduledMessages();
+      navigate("/schedule-messages", { replace: true });
     } catch (error: any) {
       console.error("Erro ao agendar mensagens:", error);
       toast.error("Erro ao agendar mensagens: " + (error.message || "Erro desconhecido"));
@@ -379,25 +406,34 @@ const ScheduleMessages = () => {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="default-message">Mensagem Padrão</Label>
-                  <textarea
+                  <RichTextarea
                     id="default-message"
-                    className="w-full min-h-[100px] px-3 py-2 border rounded-md"
+                    className="min-h-[100px]"
                     value={defaultMessage}
-                    onChange={(e) => applyToAll("message", e.target.value)}
+                    onChange={(val) => applyToAll("message", val)}
                     placeholder="Digite a mensagem padrão..."
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Suporta marcadores dinâmicos como{" "}
+                    <code className="px-1 py-0.5 rounded bg-muted">{`{name}`}</code> (nome do lead) e{" "}
+                    <code className="px-1 py-0.5 rounded bg-muted">{`{organization}`}</code> (empresa do lead),
+                    que serão substituídos automaticamente ao agendar.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="start-time">Horário de Início</Label>
-                  <Input
-                    id="start-time"
-                    type="datetime-local"
-                    min={getMinDateTime()}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        applyToAll("time", e.target.value);
+                  <DateTimePicker
+                    value={
+                      leads.length > 0
+                        ? leads[0].scheduledDateTime
+                        : getMinDateTime()
+                    }
+                    onChange={(value) => {
+                      if (value) {
+                        applyToAll("time", value);
                       }
                     }}
+                    min={getMinDateTime()}
                   />
                 </div>
               </CardContent>
@@ -434,19 +470,20 @@ const ScheduleMessages = () => {
                             {lead.leadWhatsApp ? formatPhoneDisplay(lead.leadWhatsApp) : "-"}
                           </TableCell>
                           <TableCell>
-                            <Input
-                              type="datetime-local"
+                            <DateTimePicker
                               value={lead.scheduledDateTime}
+                              onChange={(value) =>
+                                updateScheduledTime(lead.leadId, value)
+                              }
                               min={getMinDateTime()}
-                              onChange={(e) => updateScheduledTime(lead.leadId, e.target.value)}
-                              className="w-[200px]"
+                              className="w-[240px]"
                             />
                           </TableCell>
                           <TableCell>
-                            <textarea
-                              className="w-full min-h-[80px] px-3 py-2 border rounded-md text-sm"
+                            <RichTextarea
+                              className="min-h-[80px] text-sm"
                               value={lead.message}
-                              onChange={(e) => updateMessage(lead.leadId, e.target.value)}
+                              onChange={(val) => updateMessage(lead.leadId, val)}
                               placeholder="Digite a mensagem..."
                             />
                           </TableCell>
@@ -578,8 +615,17 @@ const ScheduleMessages = () => {
                               </TableCell>
                               <TableCell>
                                 <div className="max-w-[300px]">
-                                  <p className="text-sm truncate" title={msg.message}>
-                                    {msg.message}
+                                  <p
+                                    className="text-sm truncate"
+                                    title={formatLeadMessage(msg.message, {
+                                      leadName: msg.lead_name,
+                                      organizationName: undefined,
+                                    })}
+                                  >
+                                    {formatLeadMessage(msg.message, {
+                                      leadName: msg.lead_name,
+                                      organizationName: undefined,
+                                    })}
                                   </p>
                                   {msg.image_url && (
                                     <Badge variant="outline" className="mt-1 text-xs">
