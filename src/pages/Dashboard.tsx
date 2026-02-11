@@ -63,6 +63,9 @@ import {
   Loader2,
   BarChart3,
   Wallet,
+  Activity,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -98,6 +101,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { LeadStatusService, LeadStatus } from "@/services/LeadStatusService";
+import { useNebulaWebSocket } from "@/hooks/useNebulaWebSocket";
 
 const TableRowMemo = memo(
   ({
@@ -376,6 +380,21 @@ const Dashboard = () => {
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
   const [isLeadDialogOpen, setIsLeadDialogOpen] = useState(false);
   const statusService = new LeadStatusService();
+  const applyStatusUpdateToLeads = useCallback(
+    (payload: { leadId: string; newStatus: string }) => {
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === payload.leadId ? { ...l, status: payload.newStatus } : l
+        )
+      );
+    },
+    []
+  );
+
+  const { connected, statusUpdates, emitStatusUpdate } = useNebulaWebSocket(
+    organization?.id,
+    { onStatusUpdate: applyStatusUpdateToLeads }
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -493,19 +512,8 @@ const Dashboard = () => {
       .catch(() => setLeadValuesTotal({}));
   }, [leads, valueTypeRepository]);
 
-  useEffect(() => {
-    if (viewMode !== "kanban" || !organization?.id) {
-      return;
-    }
-
-    const updateInterval = setInterval(() => {
-      fetchLeads();
-    }, 30000);
-
-    return () => {
-      clearInterval(updateInterval);
-    };
-  }, [viewMode, organization?.id, fetchLeads]);
+  // Atualizações de status vêm pelo WebSocket (useNebulaWebSocket + onStatusUpdate);
+  // não é mais necessário refetch periódico dos leads.
 
   const filteredLeads = useMemo(() => {
     if (!searchQuery.trim()) return leads;
@@ -585,6 +593,17 @@ const Dashboard = () => {
         .eq("id", leadId);
 
       if (error) throw error;
+
+      const newStatusLabel =
+        statusColumns.find((c) => c.id === newStatus)?.label || newStatus;
+      emitStatusUpdate({
+        leadId,
+        leadName: lead.name || "Lead",
+        oldStatus,
+        newStatus,
+        newStatusLabel,
+        organizationId: organization?.id,
+      });
 
       toast.success("Status atualizado com sucesso!");
     } catch (error: any) {
@@ -1319,6 +1338,64 @@ Se quiser saber mais, é só acessar:
               </div>
             </div>
           </div>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Atualizações de status
+                </CardTitle>
+                <span
+                  className="flex items-center gap-1 text-xs text-muted-foreground"
+                  title={connected ? "WebSocket conectado" : "WebSocket desconectado"}
+                >
+                  {connected ? (
+                    <Wifi className="w-3.5 h-3.5 text-green-600" />
+                  ) : (
+                    <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                  {connected ? "Ao vivo" : "Offline"}
+                </span>
+              </div>
+              <CardDescription className="text-xs">
+                Registro em tempo real das mudanças de status no dashboard
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="max-h-[200px] overflow-y-auto space-y-2 pr-1">
+                {statusUpdates.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Nenhuma atualização recente. Altere um status na tabela ou no Kanban.
+                  </p>
+                ) : (
+                  statusUpdates.map((update, i) => (
+                    <div
+                      key={`${update.leadId}-${update.timestamp}-${i}`}
+                      className="text-sm border-b border-border/50 pb-2 last:border-0"
+                    >
+                      <p className="font-medium truncate" title={update.leadName}>
+                        {update.leadName}
+                      </p>
+                      <p className="text-muted-foreground text-xs mt-0.5">
+                        {update.oldStatus} →{" "}
+                        <span className="text-foreground font-medium">
+                          {update.newStatusLabel || update.newStatus}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {format(
+                          new Date(update.timestamp),
+                          "dd/MM/yyyy HH:mm",
+                          { locale: ptBR }
+                        )}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </header>
 
         {viewMode === "metrics-leads" && (
