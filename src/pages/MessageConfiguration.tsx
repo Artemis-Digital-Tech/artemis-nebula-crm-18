@@ -9,6 +9,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, Save } from "lucide-react";
 import { useOrganization } from "@/hooks/useOrganization";
+import {
+  AVAILABLE_PLACEHOLDERS,
+  formatLeadMessage,
+} from "@/utils/messageTemplate";
 
 export default function MessageConfiguration() {
   const { toast } = useToast();
@@ -17,6 +21,52 @@ export default function MessageConfiguration() {
   const [message, setMessage] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  const getTemplateFeedback = (text: string) => {
+    if (!text) {
+      return {
+        status: "neutral" as const,
+        label: "Digite sua mensagem e use os marcadores se desejar.",
+      };
+    }
+
+    const matches = text.match(/\{[^}]+\}/g) || [];
+
+    if (matches.length === 0) {
+      return {
+        status: "neutral" as const,
+        label: "Nenhum marcador dinâmico encontrado. A mensagem será enviada exatamente como está.",
+      };
+    }
+
+    const unknown = matches.filter(
+      (token) => !AVAILABLE_PLACEHOLDERS.includes(token),
+    );
+    const hasKnown = matches.some((token) =>
+      AVAILABLE_PLACEHOLDERS.includes(token),
+    );
+
+    if (unknown.length > 0) {
+      return {
+        status: "error" as const,
+        label: `Marcadores inválidos: ${unknown.join(
+          ", ",
+        )}. Use apenas ${AVAILABLE_PLACEHOLDERS.join(", ")}.`,
+      };
+    }
+
+    if (hasKnown) {
+      return {
+        status: "success" as const,
+        label: "Marcadores dinâmicos válidos! Eles serão substituídos corretamente no envio.",
+      };
+    }
+
+    return {
+      status: "neutral" as const,
+      label: "Revise seus marcadores dinâmicos.",
+    };
+  };
 
   useEffect(() => {
     if (organization?.id) {
@@ -156,6 +206,57 @@ export default function MessageConfiguration() {
             <p className="text-sm text-muted-foreground">
               Esta mensagem será enviada automaticamente ao iniciar uma conversa com o lead.
             </p>
+            {(() => {
+              const feedback = getTemplateFeedback(message);
+              const colorClasses =
+                feedback.status === "success"
+                  ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+                  : feedback.status === "error"
+                    ? "text-red-600 bg-red-50 border-red-200"
+                    : "text-muted-foreground bg-muted/40 border-muted";
+
+              return (
+                <div
+                  className={`mt-1 inline-flex items-center rounded-full border px-3 py-1 text-xs ${colorClasses}`}
+                >
+                  <span
+                    className={`mr-2 h-2 w-2 rounded-full ${
+                      feedback.status === "success"
+                        ? "bg-emerald-500"
+                        : feedback.status === "error"
+                          ? "bg-red-500"
+                          : "bg-muted-foreground"
+                    }`}
+                  />
+                  {feedback.label}
+                </div>
+              );
+            })()}
+            <p className="text-xs text-muted-foreground">
+              Você pode usar marcadores dinâmicos como{" "}
+              <code className="px-1 py-0.5 rounded bg-muted">{`{name}`}</code> para o
+              nome do lead e{" "}
+              <code className="px-1 py-0.5 rounded bg-muted">{`{organization}`}</code>{" "}
+              para o nome da empresa. Eles serão substituídos automaticamente na hora
+              do envio.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Disponíveis: {AVAILABLE_PLACEHOLDERS.join(", ")}
+            </p>
+            {message && (
+              <div className="mt-2 rounded-md border bg-muted/40 p-3">
+                <p className="text-xs font-medium mb-1 text-muted-foreground">
+                  Preview com dados de exemplo:
+                </p>
+                <p className="text-xs whitespace-pre-wrap">
+                  {formatLeadMessage(message, {
+                    leadName: "João da Silva",
+                    organizationName:
+                      organization?.name ?? "Empresa Exemplo",
+                  })}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
