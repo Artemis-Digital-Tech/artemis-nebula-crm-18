@@ -70,21 +70,6 @@ const Login = () => {
   }, [navigate]);
 
   const handleSubmit = form.handleSubmit(async (data) => {
-    const isLocalEnvironment =
-      import.meta.env.VITE_SUPABASE_URL?.includes("localhost") ||
-      import.meta.env.VITE_SUPABASE_URL?.includes("127.0.0.1") ||
-      import.meta.env.DEV;
-
-    if (!isLocalEnvironment && data.email === "admin@email.com") {
-      toast({
-        title: "Erro",
-        description:
-          "Login com este email não é permitido em ambiente de produção",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password,

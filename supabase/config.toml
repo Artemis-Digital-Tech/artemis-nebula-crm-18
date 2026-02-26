@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.get-org-token]
 verify_jwt = false
+
+[functions.provision-pro-user]
+verify_jwt = false

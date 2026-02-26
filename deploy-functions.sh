@@ -28,6 +28,7 @@ echo ""
 FUNCTIONS=(
     "create-admin-user"
     "create-payment-link"
+    "provision-pro-user"
     "evolution-check-whatsapp"
     "evolution-create-instance"
     "evolution-connect-instance"
