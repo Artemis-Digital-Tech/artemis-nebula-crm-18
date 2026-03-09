@@ -10,6 +10,7 @@ export interface ISignupLeadPayload {
   email: string;
   companyDescription: string;
   contactPreference: SignupContactPreference;
+  activationLink: string;
 }
 
 export interface IYgdrasilSignupService {

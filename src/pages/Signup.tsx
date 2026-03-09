@@ -121,12 +121,14 @@ const Signup = () => {
   const handleSubmit = form.handleSubmit(async (data) => {
     setIsLoading(true);
     try {
+      const activationLink = `${window.location.origin}/activate?email=${encodeURIComponent(data.email)}`;
       await ygdrasilSignupService.sendLead({
         companyName: data.companyName,
         phone: data.phone ?? "",
         email: data.email,
         companyDescription: data.companyDescription ?? "",
         contactPreference: data.contactPreference,
+        activationLink,
       });
       toast({
         title: "Solicitação enviada!",
