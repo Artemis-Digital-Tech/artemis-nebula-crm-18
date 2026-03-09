@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import Activate from "./pages/Activate";
 import Plans from "./pages/Plans";
 import Dashboard from "./pages/Dashboard";
 import LeadForm from "./pages/LeadForm";
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/planos" element={<Plans />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/activate" element={<Activate />} />
             <Route
               path="/dashboard"
               element={

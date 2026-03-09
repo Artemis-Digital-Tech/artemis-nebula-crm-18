@@ -45,7 +45,7 @@ const Plans = () => {
       key: "regular",
       name: "Regular",
       priceMonthly: "R$449,00",
-      implementationLabel: "Com implementação",
+      implementationLabel: "+implementação",
       highlight: "Mais vendido",
       users: "2 user",
       featuresIncluded: [
@@ -68,7 +68,7 @@ const Plans = () => {
       key: "pro",
       name: "Pro",
       priceMonthly: "R$599,00",
-      implementationLabel: "Com implementação",
+      implementationLabel: "+implementação",
       users: "3 user",
       featuresIncluded: [
         "Busca de leads por categoria",
