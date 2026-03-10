@@ -1,7 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "3.3.2-beta",
+  "version": "4.0.0-beta-lead",
   "type": "module",
   "packageManager": "yarn@1.22.22",
   "scripts": {

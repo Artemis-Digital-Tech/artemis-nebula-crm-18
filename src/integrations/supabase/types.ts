@@ -188,6 +188,7 @@ export type Database = {
       }
       lead_categories: {
         Row: {
+          cnae_codes: string[] | null
           created_at: string | null
           description: string | null
           id: string
@@ -196,6 +197,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          cnae_codes?: string[] | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -204,6 +206,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          cnae_codes?: string[] | null
           created_at?: string | null
           description?: string | null
           id?: string

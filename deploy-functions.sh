@@ -46,6 +46,7 @@ FUNCTIONS=(
     "process-ai-context-document"
     "ensure-pinecone-index"
     "search-nearby-businesses"
+    "search-casa-dados-businesses"
     "suggest-categories"
     "upload-to-google-drive"
 )

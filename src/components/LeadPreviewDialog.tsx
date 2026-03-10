@@ -17,7 +17,7 @@ import {
   ExternalLink,
   CheckCircle2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cleanPhoneNumber, formatPhoneDisplay } from "@/lib/utils";
 
 interface BusinessResult {
   name: string;
@@ -56,7 +56,8 @@ export const LeadPreviewDialog = ({
 
   const handleCallPhone = () => {
     if (business.phone) {
-      window.location.href = `tel:${business.phone}`;
+      const phoneForCall = cleanPhoneNumber(business.phone);
+      window.location.href = `tel:${phoneForCall || business.phone}`;
     }
   };
 
@@ -138,7 +139,7 @@ export const LeadPreviewDialog = ({
                     Telefone
                   </h3>
                   <div className="flex items-center gap-2">
-                    <p className="text-base">{business.phone}</p>
+                    <p className="text-base">{formatPhoneDisplay(business.phone)}</p>
                     <Button
                       variant="ghost"
                       size="sm"
