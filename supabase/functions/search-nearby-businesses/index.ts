@@ -24,13 +24,18 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const { location, categories, radius = 5000 } = await req.json();
+    const { location, categories = [], textQuery = "", radius = 5000 } = await req.json();
+    const cleanedCategories = (Array.isArray(categories) ? categories : [])
+      .map((category: string) => category.trim())
+      .filter(Boolean);
+    const normalizedTextQuery = String(textQuery ?? "").trim();
+    const searchTerms = Array.from(new Set([...cleanedCategories, normalizedTextQuery].filter(Boolean)));
     
-    if (!location || !categories || categories.length === 0) {
-      throw new Error("Location and categories are required");
+    if (!location || searchTerms.length === 0) {
+      throw new Error("Location and at least one search term are required");
     }
 
-    logStep("Request parameters", { location, categories, radius });
+    logStep("Request parameters", { location, categories: cleanedCategories, textQuery: normalizedTextQuery, radius });
 
 
     const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
@@ -70,11 +75,11 @@ serve(async (req) => {
 
     const allBusinesses: any[] = [];
     
-    for (const category of categories) {
-      logStep("Searching for category", { category });
+    for (const term of searchTerms) {
+      logStep("Searching for term", { term });
 
 
-      const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(category)}&location=${lat},${lng}&radius=${radius}&language=pt-BR&key=${apiKey}`;
+      const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(term)}&location=${lat},${lng}&radius=${radius}&language=pt-BR&key=${apiKey}`;
       
       const searchResponse = await fetch(searchUrl);
       const searchData = await searchResponse.json();
@@ -92,7 +97,7 @@ serve(async (req) => {
             
             if (detailsData.status === "OK" && detailsData.result) {
 
-              let email = null;
+              let email: string | null = null;
               if (detailsData.result.website) {
                 const websiteUrl = detailsData.result.website;
                 const domain = websiteUrl.replace(/^https?:\/\//i, '').split('/')[0];
@@ -105,7 +110,7 @@ serve(async (req) => {
                 address: detailsData.result.formatted_address || place.vicinity,
                 phone: detailsData.result.formatted_phone_number || null,
                 email: email,
-                category: category,
+                category: term,
                 rating: detailsData.result.rating || null,
                 latitude: detailsData.result.geometry?.location?.lat || null,
                 longitude: detailsData.result.geometry?.location?.lng || null,
@@ -121,7 +126,7 @@ serve(async (req) => {
               address: place.formatted_address || place.vicinity,
               phone: null,
               email: null,
-              category: category,
+              category: term,
               rating: place.rating || null,
               latitude: place.geometry?.location?.lat || null,
               longitude: place.geometry?.location?.lng || null,
