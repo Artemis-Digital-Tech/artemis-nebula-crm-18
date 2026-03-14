@@ -155,8 +155,9 @@ const Login = () => {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-transparent">
                 Bem-vindo de volta
               </h1>
-              <p className="text-muted-foreground text-lg min-h-[2rem] flex items-center justify-center">
+              <div className="text-muted-foreground text-lg min-h-[2rem] flex items-center justify-center">
                 <TextType
+                  as="span"
                   text={[
                     "Continue de onde parou",
                     "Gestão inteligente de leads",
@@ -169,7 +170,7 @@ const Login = () => {
                   cursorClassName="text-primary"
                   className="text-muted-foreground"
                 />
-              </p>
+              </div>
             </div>
           </div>
 

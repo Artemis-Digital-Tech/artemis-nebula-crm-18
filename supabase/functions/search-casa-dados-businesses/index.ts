@@ -12,15 +12,39 @@ const corsHeaders = {
 interface SearchRequest {
   uf: string;
   municipio?: string;
+  bairro?: string[];
   categories?: string[];
   textQuery?: string;
   cnaeCodes?: string[];
+  cnaeSecundario?: string[];
+  incluirAtividadeSecundaria?: boolean;
+  codigoNaturezaJuridica?: string[];
   limit?: number;
   page?: number;
+  situacaoCadastral?: string[];
+  matrizFilial?: "MATRIZ" | "FILIAL";
+  comTelefone?: boolean;
+  comEmail?: boolean;
+  somenteMatriz?: boolean;
+  somenteFilial?: boolean;
+  somenteFixo?: boolean;
+  somenteCelular?: boolean;
+  porteEmpresa?: string[];
+  capitalSocialMin?: number;
+  capitalSocialMax?: number;
+  dataAberturaInicio?: string;
+  dataAberturaFim?: string;
+  dataAberturaUltimosDias?: number;
+  meiOptante?: boolean;
+  meiExcluirOptante?: boolean;
+  simplesOptante?: boolean;
+  simplesExcluirOptante?: boolean;
 }
 
 interface SearchBusinessResult {
   name: string;
+  razaoSocial?: string;
+  cnpj?: string;
   address: string;
   phone: string | null;
   email: string | null;
@@ -28,6 +52,11 @@ interface SearchBusinessResult {
   rating: null;
   latitude: number | null;
   longitude: number | null;
+  porte?: string;
+  matrizFilial?: string;
+  dataAbertura?: string;
+  capitalSocial?: number;
+  naturezaJuridica?: string;
 }
 
 const logStep = (step: string, details?: unknown) => {
@@ -208,11 +237,33 @@ serve(async (req) => {
     const {
       uf,
       municipio,
+      bairro = [],
       categories = [],
       textQuery = "",
       cnaeCodes = [],
+      cnaeSecundario = [],
+      incluirAtividadeSecundaria = false,
+      codigoNaturezaJuridica = [],
       limit = 50,
       page = 1,
+      situacaoCadastral,
+      matrizFilial,
+      comTelefone = true,
+      comEmail,
+      somenteMatriz,
+      somenteFilial,
+      somenteFixo,
+      somenteCelular,
+      porteEmpresa = [],
+      capitalSocialMin,
+      capitalSocialMax,
+      dataAberturaInicio,
+      dataAberturaFim,
+      dataAberturaUltimosDias,
+      meiOptante,
+      meiExcluirOptante,
+      simplesOptante,
+      simplesExcluirOptante,
     }: SearchRequest = await req.json();
 
     if (!uf?.trim()) {
@@ -225,16 +276,30 @@ serve(async (req) => {
     const normalizedTextQuery = String(textQuery ?? "").trim();
     const textualSearchTerms = normalizedTextQuery ? [normalizedTextQuery] : [];
     const cleanedCnaes = cnaeCodes.map((item) => onlyDigits(item)).filter(Boolean);
+    const cleanedCnaeSec = cnaeSecundario.map((item) => onlyDigits(item)).filter(Boolean);
+    const cleanedNatureza = codigoNaturezaJuridica.map((item) => onlyDigits(item)).filter(Boolean);
 
     if (textualSearchTerms.length === 0 && cleanedCnaes.length === 0) {
       throw new Error("Informe uma busca textual livre ou um código CNAE");
     }
 
+    const cleanedSituacao = Array.isArray(situacaoCadastral)
+      ? situacaoCadastral.map((s) => String(s).trim().toUpperCase()).filter(Boolean)
+      : [];
+    const situacaoFinal = cleanedSituacao.length > 0 ? cleanedSituacao : ["ATIVA"];
+
+    const maisFiltros: Record<string, boolean> = {
+      com_telefone: comTelefone,
+    };
+    if (comEmail !== undefined) maisFiltros.com_email = comEmail;
+    if (somenteMatriz !== undefined) maisFiltros.somente_matriz = somenteMatriz;
+    if (somenteFilial !== undefined) maisFiltros.somente_filial = somenteFilial;
+    if (somenteFixo !== undefined) maisFiltros.somente_fixo = somenteFixo;
+    if (somenteCelular !== undefined) maisFiltros.somente_celular = somenteCelular;
+
     const payload: Record<string, unknown> = {
-      situacao_cadastral: ["ATIVA"],
-      mais_filtros: {
-        com_telefone: true,
-      },
+      situacao_cadastral: situacaoFinal,
+      mais_filtros: maisFiltros,
       uf: [uf.toLowerCase()],
       limite: Math.max(1, Math.min(limit, 100)),
       pagina: Math.max(page, 1),
@@ -242,6 +307,55 @@ serve(async (req) => {
 
     if (municipio?.trim()) {
       payload.municipio = [municipio.toLowerCase()];
+    }
+
+    if (Array.isArray(bairro) && bairro.length > 0) {
+      payload.bairro = bairro.map((b) => String(b).trim().toLowerCase()).filter(Boolean);
+    }
+
+    if (matrizFilial) {
+      payload.matriz_filial = matrizFilial;
+    }
+
+    if (incluirAtividadeSecundaria) {
+      payload.incluir_atividade_secundaria = true;
+    }
+
+    if (cleanedCnaeSec.length > 0) {
+      payload.codigo_atividade_secundaria = cleanedCnaeSec;
+    }
+
+    if (cleanedNatureza.length > 0) {
+      payload.codigo_natureza_juridica = cleanedNatureza;
+    }
+
+    if (porteEmpresa.length > 0) {
+      payload.porte_empresa = { codigos: porteEmpresa };
+    }
+
+    if (capitalSocialMin !== undefined || capitalSocialMax !== undefined) {
+      payload.capital_social = {};
+      if (capitalSocialMin !== undefined) (payload.capital_social as Record<string, number>).minimo = capitalSocialMin;
+      if (capitalSocialMax !== undefined) (payload.capital_social as Record<string, number>).maximo = capitalSocialMax;
+    }
+
+    if (dataAberturaInicio || dataAberturaFim || dataAberturaUltimosDias) {
+      payload.data_abertura = {};
+      if (dataAberturaInicio) (payload.data_abertura as Record<string, string>).inicio = dataAberturaInicio;
+      if (dataAberturaFim) (payload.data_abertura as Record<string, string>).fim = dataAberturaFim;
+      if (dataAberturaUltimosDias) (payload.data_abertura as Record<string, number>).ultimos_dias = dataAberturaUltimosDias;
+    }
+
+    if (meiOptante !== undefined || meiExcluirOptante !== undefined) {
+      payload.mei = {};
+      if (meiOptante !== undefined) (payload.mei as Record<string, boolean>).optante = meiOptante;
+      if (meiExcluirOptante !== undefined) (payload.mei as Record<string, boolean>).excluir_optante = meiExcluirOptante;
+    }
+
+    if (simplesOptante !== undefined || simplesExcluirOptante !== undefined) {
+      payload.simples = {};
+      if (simplesOptante !== undefined) (payload.simples as Record<string, boolean>).optante = simplesOptante;
+      if (simplesExcluirOptante !== undefined) (payload.simples as Record<string, boolean>).excluir_optante = simplesExcluirOptante;
     }
 
     if (textualSearchTerms.length > 0) {
@@ -267,6 +381,8 @@ serve(async (req) => {
       cnaeCodes: cleanedCnaes,
       limit: payload.limite,
       page: payload.pagina,
+      situacaoCadastral: situacaoFinal,
+      comTelefone,
     });
 
     const searchResponse = await fetch(`${CASA_DOS_DADOS_API_URL}/v5/cnpj/pesquisa?tipo_resultado=completo`, {
@@ -308,8 +424,13 @@ serve(async (req) => {
         continue;
       }
 
+      const porteDesc = company?.porte_empresa?.descricao || company?.porte_empresa?.codigo;
+      const matrizFilialVal = company?.matriz_filial;
+
       businesses.push({
         name: company?.nome_fantasia || company?.razao_social || company?.cnpj || "Empresa sem nome",
+        razaoSocial: company?.razao_social || undefined,
+        cnpj: company?.cnpj ? onlyDigits(company.cnpj) : undefined,
         address: buildAddress(company?.endereco),
         phone: primaryPhone,
         email: emails[0] || null,
@@ -317,6 +438,11 @@ serve(async (req) => {
         rating: null,
         latitude: company?.endereco?.ibge?.latitude || null,
         longitude: company?.endereco?.ibge?.longitude || null,
+        porte: porteDesc || undefined,
+        matrizFilial: matrizFilialVal || undefined,
+        dataAbertura: company?.data_abertura || undefined,
+        capitalSocial: typeof company?.capital_social === "number" ? company.capital_social : undefined,
+        naturezaJuridica: company?.descricao_natureza_juridica || company?.codigo_natureza_juridica || undefined,
       });
     }
 
@@ -326,10 +452,13 @@ serve(async (req) => {
       skippedWithoutPhone,
     });
 
+    const apiTotal = typeof data?.total === "number" ? data.total : companies.length;
+
     return new Response(
       JSON.stringify({
         businesses,
         total: businesses.length,
+        totalFromApi: apiTotal,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

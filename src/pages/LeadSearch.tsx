@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,19 @@ import {
   Eye,
   ChevronDown,
   ChevronUp,
+  Building2,
+  FileCheck,
+  Phone as PhoneIcon,
+  ChevronRight,
+  Briefcase,
+  Calendar,
+  DollarSign,
+  Hash,
+  Trophy,
+  Sparkles,
+  Target,
+  SlidersHorizontal,
+  Zap,
 } from "lucide-react";
 import { useOrganization } from "@/hooks/useOrganization";
 import { cleanPhoneNumber, formatWhatsAppNumber } from "@/lib/utils";
@@ -63,6 +76,43 @@ import { InteractiveMap } from "@/components/InteractiveMap";
 import { CategoriesDragDrop } from "@/components/CategoriesDragDrop";
 import { LeadPreviewDialog } from "@/components/LeadPreviewDialog";
 import { AnimatedLoading } from "@/components/AnimatedLoading";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Switch } from "@/components/ui/switch";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
+
+const PAGE_SIZE = 20;
+const SITUACAO_CADASTRAL_OPTIONS = [
+  { value: "ATIVA", label: "Ativa" },
+  { value: "BAIXADA", label: "Baixada" },
+  { value: "SUSPENSA", label: "Suspensa" },
+  { value: "INAPTA", label: "Inapta" },
+  { value: "NULA", label: "Nula" },
+] as const;
+
+const PORTE_EMPRESA_OPTIONS = [
+  { value: "01", label: "Micro Empresa" },
+  { value: "03", label: "Empresa de Pequeno Porte" },
+  { value: "05", label: "Demais" },
+] as const;
+
+const MATRIZ_FILIAL_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "MATRIZ", label: "Matriz" },
+  { value: "FILIAL", label: "Filial" },
+] as const;
 
 interface BusinessResult {
   name: string;
@@ -73,6 +123,18 @@ interface BusinessResult {
   rating?: number;
   latitude?: number;
   longitude?: number;
+  cnpj?: string;
+  razaoSocial?: string;
+  porte?: string;
+  matrizFilial?: string;
+  dataAbertura?: string;
+  capitalSocial?: number;
+  naturezaJuridica?: string;
+}
+
+function getBusinessKey(business: BusinessResult): string {
+  const phone = business.phone ? cleanPhoneNumber(business.phone) : "";
+  return `${phone}|${business.name}|${business.address}`;
 }
 
 interface Category {
@@ -134,10 +196,32 @@ const LeadSearch = () => {
     uf: "SP",
     municipio: "",
     limit: 50,
+    situacaoCadastral: ["ATIVA"] as string[],
+    comTelefone: true,
+    comEmail: undefined as boolean | undefined,
+    matrizFilial: "" as "" | "MATRIZ" | "FILIAL",
+    porteEmpresa: [] as string[],
+    somenteMatriz: undefined as boolean | undefined,
+    somenteFilial: undefined as boolean | undefined,
+    somenteFixo: undefined as boolean | undefined,
+    somenteCelular: undefined as boolean | undefined,
+    capitalSocialMin: undefined as number | undefined,
+    capitalSocialMax: undefined as number | undefined,
+    dataAberturaUltimosDias: undefined as number | undefined,
+    incluirAtividadeSecundaria: false,
+    meiOptante: undefined as boolean | undefined,
+    simplesOptante: undefined as boolean | undefined,
+    bairro: "" as string,
   });
   const [searchResults, setSearchResults] = useState<BusinessResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedBusinesses, setSelectedBusinesses] = useState<number[]>([]);
+  const [selectedBusinessKeys, setSelectedBusinessKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [totalFromApi, setTotalFromApi] = useState<number | null>(null);
+  const [casaDadosApiPage, setCasaDadosApiPage] = useState(1);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [allowUnverifiedWhatsapp, setAllowUnverifiedWhatsapp] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
@@ -170,6 +254,25 @@ const LeadSearch = () => {
   >("search");
   const [freeTextSearch, setFreeTextSearch] = useState("");
   const [freeTextExpanded, setFreeTextExpanded] = useState(false);
+  const [casaDadosFiltrosAvancadosOpen, setCasaDadosFiltrosAvancadosOpen] =
+    useState(false);
+  const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
+  const searchCacheRef = useRef<Map<string, BusinessResult[]>>(new Map());
+
+  const activeFiltersCount = useMemo(() => {
+    if (searchSource === "google") return 0;
+    let count = 0;
+    if (casaDosDadosParams.matrizFilial) count++;
+    if (casaDosDadosParams.porteEmpresa.length) count++;
+    if (casaDosDadosParams.comEmail) count++;
+    if (casaDosDadosParams.bairro) count++;
+    if (casaDosDadosParams.capitalSocialMin ?? casaDosDadosParams.capitalSocialMax) count++;
+    if (casaDosDadosParams.dataAberturaUltimosDias) count++;
+    if (casaDosDadosParams.incluirAtividadeSecundaria) count++;
+    if (casaDosDadosParams.meiOptante) count++;
+    if (casaDosDadosParams.simplesOptante) count++;
+    return count;
+  }, [searchSource, casaDosDadosParams]);
 
   const formatCnaeCode = (value: string) => {
     const digits = value.replace(/\D/g, "");
@@ -521,22 +624,71 @@ const LeadSearch = () => {
       return;
     }
 
+    const selectedCategoryObjects = categories.filter((category) =>
+      selectedCategories.includes(category.name),
+    );
+    const cnaeCodes = Array.from(
+      new Set(
+        selectedCategoryObjects.flatMap((category) => category.cnae_codes || []),
+      ),
+    );
+
+    const cachePayload =
+      searchSource === "google"
+        ? {
+            source: "google",
+            location: searchParams.location.trim().toLowerCase(),
+            latitude: Number(searchParams.latitude.toFixed(6)),
+            longitude: Number(searchParams.longitude.toFixed(6)),
+            radius: searchParams.radius,
+            categories: [...selectedCategories].sort(),
+            textQuery: normalizedFreeTextSearch.toLowerCase(),
+          }
+        : {
+            source: "casa-dados",
+            uf: casaDosDadosParams.uf.trim().toUpperCase(),
+            municipio: casaDosDadosParams.municipio.trim().toLowerCase(),
+            limit: casaDosDadosParams.limit,
+            situacaoCadastral: [...casaDosDadosParams.situacaoCadastral].sort(),
+            comTelefone: casaDosDadosParams.comTelefone,
+            matrizFilial: casaDosDadosParams.matrizFilial,
+            porteEmpresa: [...casaDosDadosParams.porteEmpresa].sort(),
+            bairro: casaDosDadosParams.bairro,
+            comEmail: casaDosDadosParams.comEmail,
+            capitalSocialMin: casaDosDadosParams.capitalSocialMin,
+            capitalSocialMax: casaDosDadosParams.capitalSocialMax,
+            dataAberturaUltimosDias: casaDosDadosParams.dataAberturaUltimosDias,
+            incluirAtividadeSecundaria:
+              casaDosDadosParams.incluirAtividadeSecundaria,
+            meiOptante: casaDosDadosParams.meiOptante,
+            simplesOptante: casaDosDadosParams.simplesOptante,
+            somenteMatriz: casaDosDadosParams.somenteMatriz,
+            somenteFilial: casaDosDadosParams.somenteFilial,
+            somenteFixo: casaDosDadosParams.somenteFixo,
+            somenteCelular: casaDosDadosParams.somenteCelular,
+            categories: [...selectedCategories].sort(),
+            cnaeCodes: [...cnaeCodes].sort(),
+            textQuery: normalizedFreeTextSearch.toLowerCase(),
+          };
+    const cacheKey = JSON.stringify(cachePayload);
+    const cachedResults = searchCacheRef.current.get(cacheKey);
+    if (cachedResults) {
+      setSearchResults(cachedResults);
+      setSelectedBusinessKeys(new Set());
+      setCurrentPage(1);
+      setTotalFromApi(null);
+      setCasaDadosApiPage(1);
+      toast.info("Resultados carregados do cache");
+      return;
+    }
+
     setLoading(true);
-    setSearchResults([]);
-    setSelectedBusinesses([]);
+    setSelectedBusinessKeys(new Set());
+    setCurrentPage(1);
+    setCasaDadosApiPage(1);
+    setTotalFromApi(null);
 
     try {
-      const selectedCategoryObjects = categories.filter((category) =>
-        selectedCategories.includes(category.name),
-      );
-      const cnaeCodes = Array.from(
-        new Set(
-          selectedCategoryObjects.flatMap(
-            (category) => category.cnae_codes || [],
-          ),
-        ),
-      );
-
       const functionName =
         searchSource === "google"
           ? "search-nearby-businesses"
@@ -552,10 +704,36 @@ const LeadSearch = () => {
           : {
               uf: casaDosDadosParams.uf,
               municipio: casaDosDadosParams.municipio.trim() || undefined,
+              bairro: casaDosDadosParams.bairro
+                ? casaDosDadosParams.bairro
+                    .split(",")
+                    .map((b) => b.trim())
+                    .filter(Boolean)
+                : undefined,
               categories: selectedCategories,
               cnaeCodes,
               textQuery: normalizedFreeTextSearch || undefined,
               limit: casaDosDadosParams.limit,
+              page: 1,
+              situacaoCadastral: casaDosDadosParams.situacaoCadastral,
+              comTelefone: casaDosDadosParams.comTelefone,
+              comEmail: casaDosDadosParams.comEmail,
+              matrizFilial: casaDosDadosParams.matrizFilial || undefined,
+              porteEmpresa: casaDosDadosParams.porteEmpresa.length
+                ? casaDosDadosParams.porteEmpresa
+                : undefined,
+              capitalSocialMin: casaDosDadosParams.capitalSocialMin,
+              capitalSocialMax: casaDosDadosParams.capitalSocialMax,
+              dataAberturaUltimosDias:
+                casaDosDadosParams.dataAberturaUltimosDias,
+              incluirAtividadeSecundaria:
+                casaDosDadosParams.incluirAtividadeSecundaria,
+              meiOptante: casaDosDadosParams.meiOptante,
+              simplesOptante: casaDosDadosParams.simplesOptante,
+              somenteMatriz: casaDosDadosParams.somenteMatriz,
+              somenteFilial: casaDosDadosParams.somenteFilial,
+              somenteFixo: casaDosDadosParams.somenteFixo,
+              somenteCelular: casaDosDadosParams.somenteCelular,
             };
 
       const { data, error } = await supabase.functions.invoke(functionName, {
@@ -564,11 +742,12 @@ const LeadSearch = () => {
 
       if (error) throw error;
 
-      const uniqueBusinesses = Array.from(
+      const rawBusinesses = (data.businesses || []) as BusinessResult[];
+      const uniqueBusinesses: BusinessResult[] = Array.from(
         new globalThis.Map(
-          (data.businesses || [])
-            .filter((business: BusinessResult) => business.phone)
-            .map((business: BusinessResult) => {
+          rawBusinesses
+            .filter((business) => business.phone)
+            .map((business) => {
               const normalizedPhone = cleanPhoneNumber(business.phone || "");
               const fallbackKey = `${business.name}-${business.address}`
                 .trim()
@@ -580,6 +759,10 @@ const LeadSearch = () => {
       );
 
       setSearchResults(uniqueBusinesses);
+      searchCacheRef.current.set(cacheKey, uniqueBusinesses);
+      setTotalFromApi(
+        typeof data?.totalFromApi === "number" ? data.totalFromApi : null,
+      );
 
       if (uniqueBusinesses.length === 0) {
         toast.info("Nenhum negócio com WhatsApp encontrado");
@@ -600,27 +783,126 @@ const LeadSearch = () => {
     }
   };
 
-  const handleBusinessToggle = (index: number) => {
-    setSelectedBusinesses((prev) =>
-      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index],
+  const handleLoadMore = async () => {
+    if (searchSource !== "casa-dados") return;
+
+    const normalizedFreeTextSearch = freeTextSearch.trim();
+    const selectedCategoryObjects = categories.filter((category) =>
+      selectedCategories.includes(category.name),
     );
+    const cnaeCodes = Array.from(
+      new Set(
+        selectedCategoryObjects.flatMap((category) => category.cnae_codes || []),
+      ),
+    );
+
+    const nextPage = casaDadosApiPage + 1;
+    setIsLoadingMore(true);
+
+    try {
+      const body = {
+        uf: casaDosDadosParams.uf,
+        municipio: casaDosDadosParams.municipio.trim() || undefined,
+        bairro: casaDosDadosParams.bairro
+          ? casaDosDadosParams.bairro
+              .split(",")
+              .map((b) => b.trim())
+              .filter(Boolean)
+          : undefined,
+        categories: selectedCategories,
+        cnaeCodes,
+        textQuery: normalizedFreeTextSearch || undefined,
+        limit: casaDosDadosParams.limit,
+        page: nextPage,
+        situacaoCadastral: casaDosDadosParams.situacaoCadastral,
+        comTelefone: casaDosDadosParams.comTelefone,
+        comEmail: casaDosDadosParams.comEmail,
+        matrizFilial: casaDosDadosParams.matrizFilial || undefined,
+        porteEmpresa: casaDosDadosParams.porteEmpresa.length
+          ? casaDosDadosParams.porteEmpresa
+          : undefined,
+        capitalSocialMin: casaDosDadosParams.capitalSocialMin,
+        capitalSocialMax: casaDosDadosParams.capitalSocialMax,
+        dataAberturaUltimosDias: casaDosDadosParams.dataAberturaUltimosDias,
+        incluirAtividadeSecundaria:
+          casaDosDadosParams.incluirAtividadeSecundaria,
+        meiOptante: casaDosDadosParams.meiOptante,
+        simplesOptante: casaDosDadosParams.simplesOptante,
+        somenteMatriz: casaDosDadosParams.somenteMatriz,
+        somenteFilial: casaDosDadosParams.somenteFilial,
+        somenteFixo: casaDosDadosParams.somenteFixo,
+        somenteCelular: casaDosDadosParams.somenteCelular,
+      };
+
+      const { data, error } = await supabase.functions.invoke(
+        "search-casa-dados-businesses",
+        { body },
+      );
+
+      if (error) throw error;
+
+      const rawBusinesses = (data.businesses || []) as BusinessResult[];
+      const newBusinesses: BusinessResult[] = Array.from(
+        new globalThis.Map(
+          rawBusinesses
+            .filter((business) => business.phone)
+            .map((business) => {
+              const normalizedPhone = cleanPhoneNumber(business.phone || "");
+              const fallbackKey = `${business.name}-${business.address}`
+                .trim()
+                .toLowerCase();
+              const key = normalizedPhone || fallbackKey;
+              return [key, business];
+            }),
+        ).values(),
+      );
+
+      setSearchResults((prev) => {
+        const existingKeys = new Set(prev.map((b) => getBusinessKey(b)));
+        const deduped: BusinessResult[] = newBusinesses.filter(
+          (b) => !existingKeys.has(getBusinessKey(b)),
+        );
+        return [...prev, ...deduped];
+      });
+      setCasaDadosApiPage(nextPage);
+      setTotalFromApi(
+        typeof data?.totalFromApi === "number" ? data.totalFromApi : null,
+      );
+
+      if (newBusinesses.length > 0) {
+        toast.success(`${newBusinesses.length} resultado(s) adicionado(s)`);
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao carregar mais: " + errorMessage);
+      console.error(error);
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
-  const handleBusinessPreview = (business: BusinessResult, index: number) => {
+  const handleBusinessToggle = (business: BusinessResult) => {
+    const key = getBusinessKey(business);
+    setSelectedBusinessKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleBusinessPreview = (business: BusinessResult) => {
     setPreviewBusiness(business);
     setPreviewOpen(true);
   };
 
   const handlePreviewToggleSelection = () => {
     if (previewBusiness) {
-      const index = searchResults.findIndex(
-        (b) =>
-          b.name === previewBusiness.name &&
-          b.address === previewBusiness.address,
-      );
-      if (index !== -1) {
-        handleBusinessToggle(index);
-      }
+      handleBusinessToggle(previewBusiness);
     }
   };
 
@@ -630,7 +912,7 @@ const LeadSearch = () => {
   };
 
   const handleAddToLeads = () => {
-    if (selectedBusinesses.length === 0) {
+    if (selectedBusinessKeys.size === 0) {
       toast.error("Selecione pelo menos um negócio para adicionar");
       return;
     }
@@ -741,9 +1023,9 @@ const LeadSearch = () => {
   };
 
   const processAddToLeads = async () => {
-    const businessesToAdd = selectedBusinesses.map(
-      (index) => searchResults[index],
-    );
+      const businessesToAdd = searchResults.filter((b) =>
+        selectedBusinessKeys.has(getBusinessKey(b)),
+      );
     setLoading(true);
     setLoadingMessage("Validando números no WhatsApp...");
 
@@ -861,7 +1143,7 @@ const LeadSearch = () => {
       ].filter(Boolean);
       toast.success(successMessageParts.join(" "));
 
-      setSelectedBusinesses([]);
+      setSelectedBusinessKeys(new Set());
     } catch (error) {
       toast.error("Erro ao adicionar leads");
       console.error(error);
@@ -896,6 +1178,24 @@ const LeadSearch = () => {
     return filtered;
   }, [searchResults, sortBy, filterRating]);
 
+  const totalDisplayPages = Math.ceil(
+    filteredAndSortedResults.length / PAGE_SIZE,
+  );
+  const paginatedResults = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredAndSortedResults.slice(start, start + PAGE_SIZE);
+  }, [filteredAndSortedResults, currentPage]);
+
+  const hasMoreFromApi =
+    searchSource === "casa-dados" &&
+    (totalFromApi === null || searchResults.length < totalFromApi);
+
+  useEffect(() => {
+    if (totalDisplayPages > 0 && currentPage > totalDisplayPages) {
+      setCurrentPage(1);
+    }
+  }, [totalDisplayPages, currentPage]);
+
   const formatRadius = (meters: number) => {
     if (meters >= 1000) {
       return `${(meters / 1000).toFixed(1)} km`;
@@ -915,7 +1215,7 @@ const LeadSearch = () => {
         onOpenChange={setShowConfirmDialog}
         onConfirm={handleConfirmAddLeads}
         title="Confirmar Adição de Leads"
-        description={`Você está prestes a adicionar ${selectedBusinesses.length} negócio(s) como leads. Deseja continuar?`}
+        description={`Você está prestes a adicionar ${selectedBusinessKeys.size} negócio(s) como leads. Deseja continuar?`}
         confirmText="Sim, Adicionar"
         cancelText="Cancelar"
       >
@@ -953,17 +1253,6 @@ const LeadSearch = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Tabs
-              value={searchSource}
-              onValueChange={(value) =>
-                setSearchSource(value as "google" | "casa-dados")
-              }
-            >
-              <TabsList>
-                <TabsTrigger value="google">Google Places</TabsTrigger>
-                <TabsTrigger value="casa-dados">Casa dos Dados</TabsTrigger>
-              </TabsList>
-            </Tabs>
             <Sheet
               open={categoriesSheetOpen}
               onOpenChange={setCategoriesSheetOpen}
@@ -1213,9 +1502,9 @@ const LeadSearch = () => {
           </div>
         </div>
 
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 p-4 overflow-hidden">
-          <div className="lg:col-span-2 flex flex-col gap-4 min-h-0">
-            <Card className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="shrink-0 h-[48vh] min-h-[320px]">
+            <Card className="h-full overflow-hidden rounded-none border-x-0 border-t-0">
               <CardContent className="p-0 h-full">
                 <InteractiveMap
                   center={mapCenter}
@@ -1227,44 +1516,78 @@ const LeadSearch = () => {
                 />
               </CardContent>
             </Card>
+          </div>
 
-            <Card className="p-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Buscar Localização</Label>
-                  <LocationAutocomplete
-                    value={searchParams.location}
-                    onChange={(value) => {
-                      setSearchParams((prev) => ({ ...prev, location: value }));
-                      inferUfAndMunicipioFromAddress(value);
-                    }}
-                    onLocationSelect={handleLocationSelect}
-                    placeholder="Digite uma cidade, endereço ou localização..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Busca textual livre</Label>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setFreeTextExpanded((prev) => !prev)}
-                        className="h-7 w-7 p-0"
-                        title={
-                          freeTextExpanded ? "Recolher campo" : "Expandir campo"
-                        }
-                        aria-label={
-                          freeTextExpanded ? "Recolher campo" : "Expandir campo"
-                        }
-                      >
-                        {freeTextExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        )}
-                      </Button>
+          <div className="shrink-0 flex flex-wrap items-center gap-3 p-4 border-b bg-background/95 backdrop-blur">
+            <Tabs
+              value={searchSource}
+              onValueChange={(value) => {
+                setSearchSource(value as "google" | "casa-dados");
+                setSearchResults([]);
+                setSelectedBusinessKeys(new Set());
+                setCurrentPage(1);
+                setTotalFromApi(null);
+                setCasaDadosApiPage(1);
+              }}
+            >
+              <TabsList className="h-9">
+                <TabsTrigger value="google" className="gap-1.5 text-sm">
+                  <MapIcon className="w-3.5 h-3.5" />
+                  Google
+                </TabsTrigger>
+                <TabsTrigger value="casa-dados" className="gap-1.5 text-sm">
+                  <Building2 className="w-3.5 h-3.5" />
+                  Casa dos Dados
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <SlidersHorizontal className="w-4 h-4" />
+                  Filtros
+                  {activeFiltersCount > 0 && (
+                    <Badge variant="secondary" className="h-5 min-w-5 px-1.5">
+                      {activeFiltersCount}
+                    </Badge>
+                  )}
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="right"
+                className="w-full sm:max-w-md overflow-y-auto"
+              >
+                <SheetHeader>
+                  <SheetTitle className="flex items-center gap-2">
+                    <Filter className="w-5 h-5" />
+                    Filtros de Busca
+                  </SheetTitle>
+                  <SheetDescription>
+                    Configure os filtros para refinar sua busca de leads
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-6 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      Buscar Localização
+                    </Label>
+                    <LocationAutocomplete
+                      value={searchParams.location}
+                      onChange={(value) => {
+                        setSearchParams((prev) => ({ ...prev, location: value }));
+                        inferUfAndMunicipioFromAddress(value);
+                      }}
+                      onLocationSelect={handleLocationSelect}
+                      placeholder="Cidade, endereço ou localização..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2">
+                        <Search className="w-4 h-4 text-muted-foreground" />
+                        Busca textual livre
+                      </Label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -1277,78 +1600,408 @@ const LeadSearch = () => {
                         Limpar
                       </Button>
                     </div>
+                    <Input
+                      value={freeTextSearch}
+                      onChange={(e) => setFreeTextSearch(e.target.value)}
+                      placeholder={freeTextPlaceholder}
+                    />
                   </div>
-                  {freeTextExpanded && (
-                    <>
-                      <Input
-                        value={freeTextSearch}
-                        onChange={(event) =>
-                          setFreeTextSearch(event.target.value)
-                        }
-                        placeholder={freeTextPlaceholder}
+                  {searchSource === "google" ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2">
+                          <Target className="w-4 h-4 text-muted-foreground" />
+                          Raio: {formatRadius(searchParams.radius)}
+                        </Label>
+                        <Badge variant="secondary">
+                          {formatRadius(searchParams.radius)}
+                        </Badge>
+                      </div>
+                      <Slider
+                        min={1000}
+                        max={50000}
+                        step={1000}
+                        value={[searchParams.radius]}
+                        onValueChange={(value) => {
+                          setSearchParams((prev) => ({ ...prev, radius: value[0] }));
+                          handleMapRadiusChange(value[0]);
+                        }}
+                        className="w-full"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Use este campo quando não quiser selecionar categorias.
-                      </p>
-                    </>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>1 km</span>
+                        <span>50 km</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 border-t pt-4">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                          <Building2 className="w-3 h-3 mr-1" />
+                          UF: {casaDosDadosParams.uf || "-"}
+                        </Badge>
+                        <Badge variant="outline">
+                          Município: {casaDosDadosParams.municipio || "-"}
+                        </Badge>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2 text-sm">
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          Situação cadastral
+                        </Label>
+                        <Select
+                          value={casaDosDadosParams.situacaoCadastral[0] || "ATIVA"}
+                          onValueChange={(value) =>
+                            setCasaDosDadosParams((prev) => ({
+                              ...prev,
+                              situacaoCadastral: [value],
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SITUACAO_CADASTRAL_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2 text-sm">
+                          <Briefcase className="w-4 h-4 text-muted-foreground" />
+                          Matriz/Filial
+                        </Label>
+                        <Select
+                          value={casaDosDadosParams.matrizFilial || "all"}
+                          onValueChange={(value: string) =>
+                            setCasaDosDadosParams((prev) => ({
+                              ...prev,
+                              matrizFilial: value === "all" ? "" : (value as "MATRIZ" | "FILIAL"),
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MATRIZ_FILIAL_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2 text-sm">
+                          <Hash className="w-4 h-4 text-muted-foreground" />
+                          Porte da empresa
+                        </Label>
+                        <Select
+                          value={casaDosDadosParams.porteEmpresa[0] || "all"}
+                          onValueChange={(value) =>
+                            setCasaDosDadosParams((prev) => ({
+                              ...prev,
+                              porteEmpresa: value === "all" ? [] : [value],
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            {PORTE_EMPRESA_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="com-telefone" className="flex items-center gap-2 text-sm cursor-pointer">
+                          <PhoneIcon className="w-4 h-4 text-muted-foreground" />
+                          Somente com telefone
+                        </Label>
+                        <Switch
+                          id="com-telefone"
+                          checked={casaDosDadosParams.comTelefone}
+                          onCheckedChange={(checked) =>
+                            setCasaDosDadosParams((prev) => ({
+                              ...prev,
+                              comTelefone: checked,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="com-email" className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Mail className="w-4 h-4 text-muted-foreground" />
+                          Somente com e-mail
+                        </Label>
+                        <Switch
+                          id="com-email"
+                          checked={casaDosDadosParams.comEmail ?? false}
+                          onCheckedChange={(checked) =>
+                            setCasaDosDadosParams((prev) => ({
+                              ...prev,
+                              comEmail: checked ? true : undefined,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm">Resultados por página</Label>
+                        <Select
+                          value={casaDosDadosParams.limit.toString()}
+                          onValueChange={(value) =>
+                            setCasaDosDadosParams((prev) => ({
+                              ...prev,
+                              limit: Number(value),
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="20">20</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                            <SelectItem value="100">100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Collapsible
+                        open={casaDadosFiltrosAvancadosOpen}
+                        onOpenChange={setCasaDadosFiltrosAvancadosOpen}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full justify-between">
+                            <span className="flex items-center gap-2">
+                              <Zap className="w-4 h-4" />
+                              Filtros avançados
+                            </span>
+                            <ChevronRight
+                              className={`w-4 h-4 transition-transform ${
+                                casaDadosFiltrosAvancadosOpen ? "rotate-90" : ""
+                              }`}
+                            />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-4 pt-4">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Bairro</Label>
+                            <Input
+                              placeholder="Ex: centro, vila mariana"
+                              value={casaDosDadosParams.bairro}
+                              onChange={(e) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  bairro: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-sm shrink-0">Capital social (R$)</Label>
+                            <div className="flex gap-2 flex-1">
+                              <Input
+                                type="number"
+                                placeholder="Mín"
+                                value={casaDosDadosParams.capitalSocialMin ?? ""}
+                                onChange={(e) =>
+                                  setCasaDosDadosParams((prev) => ({
+                                    ...prev,
+                                    capitalSocialMin: e.target.value ? Number(e.target.value) : undefined,
+                                  }))
+                                }
+                              />
+                              <Input
+                                type="number"
+                                placeholder="Máx"
+                                value={casaDosDadosParams.capitalSocialMax ?? ""}
+                                onChange={(e) =>
+                                  setCasaDosDadosParams((prev) => ({
+                                    ...prev,
+                                    capitalSocialMax: e.target.value ? Number(e.target.value) : undefined,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="flex items-center gap-2 text-sm">
+                              <Calendar className="w-4 h-4 text-muted-foreground" />
+                              Abertas nos últimos (dias)
+                            </Label>
+                            <Input
+                              type="number"
+                              placeholder="Ex: 365"
+                              value={casaDosDadosParams.dataAberturaUltimosDias ?? ""}
+                              onChange={(e) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  dataAberturaUltimosDias: e.target.value ? Number(e.target.value) : undefined,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">Incluir CNAE secundário</Label>
+                            <Switch
+                              checked={casaDosDadosParams.incluirAtividadeSecundaria}
+                              onCheckedChange={(checked) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  incluirAtividadeSecundaria: checked,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">Somente MEI optante</Label>
+                            <Switch
+                              checked={casaDosDadosParams.meiOptante ?? false}
+                              onCheckedChange={(checked) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  meiOptante: checked ? true : undefined,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">Somente Simples optante</Label>
+                            <Switch
+                              checked={casaDosDadosParams.simplesOptante ?? false}
+                              onCheckedChange={(checked) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  simplesOptante: checked ? true : undefined,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">Somente matriz</Label>
+                            <Switch
+                              checked={casaDosDadosParams.somenteMatriz ?? false}
+                              onCheckedChange={(checked) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  somenteMatriz: checked ? true : undefined,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">Somente filial</Label>
+                            <Switch
+                              checked={casaDosDadosParams.somenteFilial ?? false}
+                              onCheckedChange={(checked) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  somenteFilial: checked ? true : undefined,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">Somente telefone fixo</Label>
+                            <Switch
+                              checked={casaDosDadosParams.somenteFixo ?? false}
+                              onCheckedChange={(checked) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  somenteFixo: checked ? true : undefined,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="text-sm">Somente celular</Label>
+                            <Switch
+                              checked={casaDosDadosParams.somenteCelular ?? false}
+                              onCheckedChange={(checked) =>
+                                setCasaDosDadosParams((prev) => ({
+                                  ...prev,
+                                  somenteCelular: checked ? true : undefined,
+                                }))
+                              }
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
                   )}
                 </div>
-
-                {searchSource === "google" ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label>
-                        Raio de Busca: {formatRadius(searchParams.radius)}
-                      </Label>
-                      <Badge variant="secondary">
-                        {formatRadius(searchParams.radius)}
-                      </Badge>
-                    </div>
-                    <Slider
-                      min={1000}
-                      max={50000}
-                      step={1000}
-                      value={[searchParams.radius]}
-                      onValueChange={(value) => {
-                        setSearchParams((prev) => ({
-                          ...prev,
-                          radius: value[0],
-                        }));
-                        handleMapRadiusChange(value[0]);
-                      }}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>1 km</span>
-                      <span>50 km</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="border-t pt-4 space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      UF e município inferidos automaticamente pelo campo de
-                      localização.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">
-                        UF: {casaDosDadosParams.uf || "-"}
-                      </Badge>
-                      <Badge variant="outline">
-                        Município: {casaDosDadosParams.municipio || "-"}
-                      </Badge>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
+              </SheetContent>
+            </Sheet>
+            <div className="flex-1 min-w-[200px] max-w-md">
+              <LocationAutocomplete
+                value={searchParams.location}
+                onChange={(value) => {
+                  setSearchParams((prev) => ({ ...prev, location: value }));
+                  inferUfAndMunicipioFromAddress(value);
+                }}
+                onLocationSelect={handleLocationSelect}
+                placeholder="Digite localização..."
+                className="w-full"
+              />
+            </div>
+            <Button
+              onClick={handleSearch}
+              disabled={
+                loading ||
+                (selectedCategories.length === 0 && !freeTextSearch.trim())
+              }
+              className="gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Buscando...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4" />
+                  Buscar Negócios
+                </>
+              )}
+            </Button>
           </div>
 
-          <div className="lg:col-span-3 flex flex-col min-h-0">
-            <ScrollArea className="flex-1">
-              <div className="space-y-4 pr-4">
+          <ScrollArea className="flex-1">
+            <div className="space-y-4 p-4 pr-4">
                 {loading && (
-                  <Card className="p-0">
-                    <AnimatedLoading />
+                  <Card className="p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Skeleton className="h-8 w-8 rounded-full" />
+                      <div className="space-y-2 flex-1">
+                        <Skeleton className="h-5 w-48" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <Card key={i} className="p-4">
+                          <div className="space-y-3">
+                            <Skeleton className="h-5 w-3/4" />
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-2/3" />
+                            <div className="flex gap-2 pt-2">
+                              <Skeleton className="h-6 w-16" />
+                              <Skeleton className="h-6 w-12" />
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
                   </Card>
                 )}
 
@@ -1356,24 +2009,73 @@ const LeadSearch = () => {
                   <>
                     <Card className="p-4">
                       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-semibold">
-                            Resultados ({filteredAndSortedResults.length})
+                        <div className="space-y-2">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <FileCheck className="w-5 h-5 text-muted-foreground" />
+                            Resultados ({filteredAndSortedResults.length}
+                            {totalFromApi !== null &&
+                              searchSource === "casa-dados" &&
+                              ` de ${totalFromApi}`}
+                            )
                           </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {selectedBusinesses.length > 0 &&
-                              `${selectedBusinesses.length} selecionado(s)`}
-                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {selectedBusinessKeys.size > 0 && (
+                              <>
+                                <Badge
+                                  variant="secondary"
+                                  className="gap-1 animate-in fade-in"
+                                >
+                                  <Target className="w-3.5 h-3.5" />
+                                  {selectedBusinessKeys.size} selecionado(s)
+                                </Badge>
+                                {selectedBusinessKeys.size >= 5 && (
+                                  <Badge
+                                    variant="default"
+                                    className="gap-1 bg-amber-500 hover:bg-amber-600"
+                                  >
+                                    <Trophy className="w-3.5 h-3.5" />
+                                    {selectedBusinessKeys.size >= 10
+                                      ? "10+ leads!"
+                                      : "5+ leads!"}
+                                  </Badge>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
                         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                          {selectedBusinesses.length > 0 && (
-                            <Button onClick={handleAddToLeads} size="sm">
-                              <Plus className="w-4 h-4 mr-2" />
-                              Adicionar {selectedBusinesses.length} Lead(s)
+                          {selectedBusinessKeys.size > 0 && (
+                            <Button
+                              onClick={handleAddToLeads}
+                              size="sm"
+                              className="gap-2"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                              Adicionar {selectedBusinessKeys.size} Lead(s)
                             </Button>
                           )}
                         </div>
                       </div>
+                      {selectedBusinessKeys.size > 0 &&
+                        filteredAndSortedResults.length > 0 && (
+                          <div className="mt-4 space-y-2">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>Progresso da seleção</span>
+                              <span>
+                                {selectedBusinessKeys.size} /{" "}
+                                {filteredAndSortedResults.length}
+                              </span>
+                            </div>
+                            <Progress
+                              value={
+                                (selectedBusinessKeys.size /
+                                  filteredAndSortedResults.length) *
+                                100
+                              }
+                              className="h-2"
+                            />
+                          </div>
+                        )}
 
                       <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t">
                         <div className="flex items-center gap-2">
@@ -1437,28 +2139,20 @@ const LeadSearch = () => {
                     </Card>
 
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {filteredAndSortedResults.map((business) => {
-                        const originalIndex = searchResults.findIndex(
-                          (b) =>
-                            b.name === business.name &&
-                            b.address === business.address,
+                      {paginatedResults.map((business) => {
+                        const isSelected = selectedBusinessKeys.has(
+                          getBusinessKey(business),
                         );
-                        const isSelected =
-                          originalIndex !== -1 &&
-                          selectedBusinesses.includes(originalIndex);
 
                         return (
                           <Card
-                            key={`${business.name}-${business.address}-${originalIndex}`}
+                            key={getBusinessKey(business)}
                             className={`cursor-pointer transition-all hover:shadow-md ${
                               isSelected
                                 ? "border-primary bg-primary/5 shadow-md"
                                 : "hover:border-accent"
                             }`}
-                            onClick={() =>
-                              originalIndex !== -1 &&
-                              handleBusinessPreview(business, originalIndex)
-                            }
+                            onClick={() => handleBusinessPreview(business)}
                           >
                             <CardContent className="p-4 space-y-3">
                               <div className="flex items-start justify-between gap-2">
@@ -1479,26 +2173,21 @@ const LeadSearch = () => {
                                     size="sm"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleBusinessPreview(
-                                        business,
-                                        originalIndex,
-                                      );
+                                      handleBusinessPreview(business);
                                     }}
                                     className="h-8 w-8 p-0"
                                     title="Ver detalhes"
                                   >
                                     <Eye className="w-4 h-4" />
                                   </Button>
-                                  {originalIndex !== -1 && (
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() =>
-                                        handleBusinessToggle(originalIndex)
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="shrink-0"
-                                    />
-                                  )}
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() =>
+                                      handleBusinessToggle(business)
+                                    }
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="shrink-0"
+                                  />
                                 </div>
                               </div>
 
@@ -1512,9 +2201,61 @@ const LeadSearch = () => {
                                     {business.rating.toFixed(1)}
                                   </Badge>
                                 )}
+                                {business.porte && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {business.porte}
+                                  </Badge>
+                                )}
+                                {business.matrizFilial && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {business.matrizFilial}
+                                  </Badge>
+                                )}
                               </div>
 
                               <div className="space-y-1.5 pt-2 border-t">
+                                {business.cnpj && (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Hash className="w-4 h-4 text-muted-foreground shrink-0" />
+                                    <span className="text-muted-foreground font-mono text-xs">
+                                      {business.cnpj.replace(
+                                        /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+                                        "$1.$2.$3/$4-$5",
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                                {business.dataAbertura && (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                                    <span className="text-muted-foreground text-xs">
+                                      Aberta em{" "}
+                                      {new Date(
+                                        business.dataAbertura,
+                                      ).toLocaleDateString("pt-BR")}
+                                    </span>
+                                  </div>
+                                )}
+                                {business.capitalSocial !== undefined &&
+                                  business.capitalSocial > 0 && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <DollarSign className="w-4 h-4 text-muted-foreground shrink-0" />
+                                      <span className="text-muted-foreground text-xs">
+                                        Capital: R${" "}
+                                        {business.capitalSocial.toLocaleString(
+                                          "pt-BR",
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
+                                {business.naturezaJuridica && (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
+                                    <span className="text-muted-foreground text-xs truncate">
+                                      {business.naturezaJuridica}
+                                    </span>
+                                  </div>
+                                )}
                                 {business.phone && (
                                   <div className="flex items-center gap-2 text-sm">
                                     <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -1547,6 +2288,113 @@ const LeadSearch = () => {
                       })}
                     </div>
 
+                    <div className="flex flex-col sm:flex-row gap-4 items-center justify-between pt-4">
+                      <p className="text-sm text-muted-foreground">
+                        Mostrando{" "}
+                        {filteredAndSortedResults.length === 0
+                          ? "0"
+                          : `${(currentPage - 1) * PAGE_SIZE + 1}-${Math.min(
+                              currentPage * PAGE_SIZE,
+                              filteredAndSortedResults.length,
+                            )}`}{" "}
+                        de {filteredAndSortedResults.length}
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {totalDisplayPages > 1 && (
+                        <Pagination>
+                          <PaginationContent>
+                            <PaginationItem>
+                              <PaginationPrevious
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (currentPage > 1) {
+                                    setCurrentPage((p) => p - 1);
+                                  }
+                                }}
+                                className={
+                                  currentPage <= 1
+                                    ? "pointer-events-none opacity-50"
+                                    : "cursor-pointer"
+                                }
+                              />
+                            </PaginationItem>
+                            {Array.from(
+                              { length: Math.min(5, totalDisplayPages) },
+                              (_, i) => {
+                                let pageNum: number;
+                                if (totalDisplayPages <= 5) {
+                                  pageNum = i + 1;
+                                } else if (currentPage <= 3) {
+                                  pageNum = i + 1;
+                                } else if (
+                                  currentPage >=
+                                  totalDisplayPages - 2
+                                ) {
+                                  pageNum = totalDisplayPages - 4 + i;
+                                } else {
+                                  pageNum = currentPage - 2 + i;
+                                }
+                                return (
+                                  <PaginationItem key={pageNum}>
+                                    <PaginationLink
+                                      href="#"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        setCurrentPage(pageNum);
+                                      }}
+                                      isActive={currentPage === pageNum}
+                                      className="cursor-pointer"
+                                    >
+                                      {pageNum}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                );
+                              },
+                            )}
+                            <PaginationItem>
+                              <PaginationNext
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (currentPage < totalDisplayPages) {
+                                    setCurrentPage((p) => p + 1);
+                                  }
+                                }}
+                                className={
+                                  currentPage >= totalDisplayPages
+                                    ? "pointer-events-none opacity-50"
+                                    : "cursor-pointer"
+                                }
+                              />
+                            </PaginationItem>
+                          </PaginationContent>
+                        </Pagination>
+                        )}
+                        {searchSource === "casa-dados" && hasMoreFromApi && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleLoadMore}
+                            disabled={isLoadingMore}
+                            className="gap-2"
+                          >
+                            {isLoadingMore ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Carregando...
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-4 h-4" />
+                                Carregar mais
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
                     {filteredAndSortedResults.length === 0 &&
                       searchResults.length > 0 && (
                         <Card className="p-8 text-center">
@@ -1573,7 +2421,6 @@ const LeadSearch = () => {
                 )}
               </div>
             </ScrollArea>
-          </div>
         </div>
       </div>
 
@@ -1583,14 +2430,7 @@ const LeadSearch = () => {
         business={previewBusiness}
         isSelected={
           previewBusiness
-            ? (() => {
-                const index = searchResults.findIndex(
-                  (b) =>
-                    b.name === previewBusiness.name &&
-                    b.address === previewBusiness.address,
-                );
-                return index !== -1 && selectedBusinesses.includes(index);
-              })()
+            ? selectedBusinessKeys.has(getBusinessKey(previewBusiness))
             : false
         }
         onToggleSelection={handlePreviewToggleSelection}
