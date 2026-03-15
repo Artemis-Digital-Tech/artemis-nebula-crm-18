@@ -34,14 +34,31 @@ export const LocationAutocomplete = ({
   const [loading, setLoading] = useState(false);
   const [inputValue, setInputValue] = useState(value);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const skipNextFetchRef = useRef(false);
+  const isInitialMountRef = useRef(true);
 
   useEffect(() => {
     setInputValue(value);
+    if (value !== inputValue) {
+      skipNextFetchRef.current = true;
+    }
   }, [value]);
 
   useEffect(() => {
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
+    }
+
+    if (skipNextFetchRef.current) {
+      skipNextFetchRef.current = false;
+      return;
+    }
+
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      if (inputValue.trim().length >= 3) {
+        return;
+      }
     }
 
     if (inputValue.trim().length < 3) {
