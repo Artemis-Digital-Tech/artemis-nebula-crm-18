@@ -16,6 +16,10 @@ import {
   Tag,
   ExternalLink,
   CheckCircle2,
+  Hash,
+  Calendar,
+  DollarSign,
+  Briefcase,
 } from "lucide-react";
 import { cleanPhoneNumber, formatPhoneDisplay } from "@/lib/utils";
 
@@ -28,6 +32,13 @@ interface BusinessResult {
   rating?: number;
   latitude?: number;
   longitude?: number;
+  cnpj?: string;
+  razaoSocial?: string;
+  porte?: string;
+  matrizFilial?: string;
+  dataAbertura?: string;
+  capitalSocial?: number;
+  naturezaJuridica?: string;
 }
 
 interface LeadPreviewDialogProps {
@@ -107,9 +118,99 @@ export const LeadPreviewDialog = ({
                 {business.rating.toFixed(1)} estrelas
               </Badge>
             )}
+            {business.porte && (
+              <Badge variant="outline" className="text-sm">
+                {business.porte}
+              </Badge>
+            )}
+            {business.matrizFilial && (
+              <Badge variant="outline" className="text-sm">
+                {business.matrizFilial}
+              </Badge>
+            )}
           </div>
 
           <div className="space-y-4">
+            {business.cnpj && (
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <Hash className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                    CNPJ
+                  </h3>
+                  <p className="text-base font-mono">
+                    {business.cnpj.replace(
+                      /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+                      "$1.$2.$3/$4-$5",
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {business.razaoSocial && business.razaoSocial !== business.name && (
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <Briefcase className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                    Razão Social
+                  </h3>
+                  <p className="text-base">{business.razaoSocial}</p>
+                </div>
+              </div>
+            )}
+
+            {business.dataAbertura && (
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <Calendar className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                    Data de Abertura
+                  </h3>
+                  <p className="text-base">
+                    {new Date(business.dataAbertura).toLocaleDateString(
+                      "pt-BR",
+                      {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                      },
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {business.capitalSocial !== undefined &&
+              business.capitalSocial > 0 && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                  <DollarSign className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                      Capital Social
+                    </h3>
+                    <p className="text-base">
+                      R${" "}
+                      {business.capitalSocial.toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {business.naturezaJuridica && (
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <Briefcase className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                    Natureza Jurídica
+                  </h3>
+                  <p className="text-base">{business.naturezaJuridica}</p>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
               <MapPin className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
@@ -184,7 +285,7 @@ export const LeadPreviewDialog = ({
                   <h3 className="text-sm font-medium text-muted-foreground mb-1">
                     Coordenadas
                   </h3>
-                  <p className="text-base font-mono text-sm">
+                  <p className="text-sm font-mono">
                     {business.latitude.toFixed(6)}, {business.longitude.toFixed(6)}
                   </p>
                 </div>
@@ -194,7 +295,11 @@ export const LeadPreviewDialog = ({
 
           <div className="pt-4 border-t">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>Informações coletadas do Google Places</span>
+              <span>
+                {business.cnpj
+                  ? "Informações da Casa dos Dados"
+                  : "Informações do Google Places"}
+              </span>
               {business.rating && (
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
