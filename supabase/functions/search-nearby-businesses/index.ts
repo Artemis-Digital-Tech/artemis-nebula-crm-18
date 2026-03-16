@@ -24,18 +24,46 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const { location, categories = [], textQuery = "", radius = 5000 } = await req.json();
+    const {
+      location,
+      categories = [],
+      textQuery = "",
+      radius = 5000,
+      page = 1,
+      pageSize = 50,
+      openNow = false,
+      minPriceLevel,
+      maxPriceLevel,
+    } = await req.json();
     const cleanedCategories = (Array.isArray(categories) ? categories : [])
       .map((category: string) => category.trim())
       .filter(Boolean);
     const normalizedTextQuery = String(textQuery ?? "").trim();
-    const searchTerms = Array.from(new Set([...cleanedCategories, normalizedTextQuery].filter(Boolean)));
-    
+    const searchTerms = Array.from(
+      new Set([...cleanedCategories, normalizedTextQuery].filter(Boolean)),
+    );
+
     if (!location || searchTerms.length === 0) {
       throw new Error("Location and at least one search term are required");
     }
 
-    logStep("Request parameters", { location, categories: cleanedCategories, textQuery: normalizedTextQuery, radius });
+    const currentPage = Math.max(1, Number(page) || 1);
+    const currentPageSize = Math.max(1, Math.min(Number(pageSize) || 50, 100));
+    const hasPriceFilter =
+      (typeof minPriceLevel === "number" && !Number.isNaN(minPriceLevel)) ||
+      (typeof maxPriceLevel === "number" && !Number.isNaN(maxPriceLevel));
+
+    logStep("Request parameters", {
+      location,
+      categories: cleanedCategories,
+      textQuery: normalizedTextQuery,
+      radius,
+      page: currentPage,
+      pageSize: currentPageSize,
+      openNow,
+      minPriceLevel,
+      maxPriceLevel,
+    });
 
 
     const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
@@ -79,7 +107,28 @@ serve(async (req) => {
       logStep("Searching for term", { term });
 
 
-      const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(term)}&location=${lat},${lng}&radius=${radius}&language=pt-BR&key=${apiKey}`;
+      const params = new URLSearchParams({
+        query: term,
+        location: `${lat},${lng}`,
+        radius: String(radius),
+        language: "pt-BR",
+        key: apiKey,
+      });
+
+      if (openNow) {
+        params.set("opennow", "true");
+      }
+
+      if (hasPriceFilter) {
+        if (typeof minPriceLevel === "number" && !Number.isNaN(minPriceLevel)) {
+          params.set("minprice", String(Math.max(0, Math.min(4, minPriceLevel))));
+        }
+        if (typeof maxPriceLevel === "number" && !Number.isNaN(maxPriceLevel)) {
+          params.set("maxprice", String(Math.max(0, Math.min(4, maxPriceLevel))));
+        }
+      }
+
+      const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?${params.toString()}`;
       
       const searchResponse = await fetch(searchUrl);
       const searchData = await searchResponse.json();
@@ -139,10 +188,24 @@ serve(async (req) => {
 
     logStep("Search completed", { totalBusinesses: allBusinesses.length });
 
+    const total = allBusinesses.length;
+    const totalPages = Math.max(
+      1,
+      Math.ceil(total / currentPageSize),
+    );
+    const startIndex = (currentPage - 1) * currentPageSize;
+    const paginatedBusinesses = allBusinesses.slice(
+      startIndex,
+      startIndex + currentPageSize,
+    );
+
     return new Response(
-      JSON.stringify({ 
-        businesses: allBusinesses,
-        total: allBusinesses.length 
+      JSON.stringify({
+        businesses: paginatedBusinesses,
+        total,
+        page: currentPage,
+        pageSize: currentPageSize,
+        totalPages,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -173,7 +236,12 @@ Parâmetros JSON esperados pela função:
     "Desenvolvimento Web",
     "E-commerce"
   ],
-  "radius": 5000                         // Raio em metros (padrão: 5000)
+  "radius": 5000,                        // Raio em metros (padrão: 5000)
+  "openNow": true,                       // (opcional) Apenas locais abertos agora
+  "minPriceLevel": 1,                    // (opcional) Nível mínimo de preço (0-4)
+  "maxPriceLevel": 3,                    // (opcional) Nível máximo de preço (0-4)
+  "page": 1,                             // (opcional) Página desejada, padrão 1
+  "pageSize": 50                         // (opcional) Itens por página, padrão 50, máx. 100
 }
 
 Resposta JSON retornada:
@@ -189,7 +257,10 @@ Resposta JSON retornada:
       "longitude": -46.6333              // Pode ser null
     }
   ],
-  "total": 10
+  "total": 10,                          // Total de negócios encontrados (todas as páginas)
+  "page": 1,                            // Página atual
+  "pageSize": 50,                       // Itens por página
+  "totalPages": 1                       // Total de páginas disponíveis
 }
 
 APIs do Google utilizadas:

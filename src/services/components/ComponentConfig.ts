@@ -93,6 +93,11 @@ export class ComponentConfigService {
       configType: "custom",
       customConfigPath: "/media-sender",
     },
+    instagram_integration: {
+      requiresConfiguration: true,
+      configType: "custom",
+      customConfigPath: "/instagram",
+    },
   };
 
   static getConfig(identifier: string): ComponentConfigDefinition {
@@ -366,6 +371,31 @@ export class ComponentConfigService {
         "Arquivos de imagem (JPG, PNG, GIF)",
         "Arquivos de vídeo (MP4, MOV)",
         "Descrição clara de quando usar cada mídia",
+      ],
+    },
+    instagram_integration: {
+      title: "Integração com Instagram",
+      description:
+        "Permite ao agente interagir via Instagram Direct (DMs) de forma integrada ao CRM. O agente pode enviar e receber mensagens, gerenciar conversas e manter histórico, usando o mesmo fluxo do n8n com canal Instagram.",
+      features: [
+        "Envio e recebimento de mensagens via Direct",
+        "Gestão de conversas no CRM",
+        "Histórico de interações",
+        "Envio de mídias (imagens, vídeos)",
+        "Integração com conta Instagram Professional",
+        "Mesmo webhook n8n com campo channel: instagram",
+      ],
+      useCases: [
+        "Atendimento ao cliente via Instagram DM",
+        "Envio de propostas e materiais por Direct",
+        "Follow-up por mensagem no Instagram",
+        "Captação de leads que iniciam contato pelo Instagram",
+        "Comunicação omnicanal (WhatsApp + Instagram)",
+      ],
+      requirements: [
+        "Conta Instagram Professional (Business ou Creator)",
+        "App Meta configurado com permissões instagram_manage_messages",
+        "Webhook configurado no Meta apontando para Edge Function",
       ],
     },
   };

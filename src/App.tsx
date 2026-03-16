@@ -24,6 +24,7 @@ import { ComponentConfiguration } from "./pages/ComponentConfiguration";
 import Documents from "./pages/Documents";
 import AIContextDocuments from "./pages/AIContextDocuments";
 import WhatsAppConnect from "./pages/WhatsAppConnect";
+import InstagramConfiguration from "./pages/InstagramConfiguration";
 import MediaSenderConfiguration from "./pages/MediaSenderConfiguration";
 import Settings from "./pages/Settings";
 import MessageConfiguration from "./pages/MessageConfiguration";
@@ -182,6 +183,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <WhatsAppConnect />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/instagram"
+              element={
+                <ProtectedRoute>
+                  <InstagramConfiguration />
                 </ProtectedRoute>
               }
             />

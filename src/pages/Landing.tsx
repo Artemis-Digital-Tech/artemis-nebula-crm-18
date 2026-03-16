@@ -18,11 +18,12 @@ import {
   Check,
   CreditCard,
   FileText,
+  Image,
+  Instagram,
   LayoutDashboard,
   Mail,
   MessageCircle,
   MessagesSquare,
-  Image,
   Plug,
   Rocket,
   ShieldCheck,
@@ -47,6 +48,7 @@ type LandingFeature = {
 
 const AGENT_ABILITY_IDENTIFIERS = [
   "whatsapp_integration",
+  "instagram_integration",
   "media_sender",
   "proposal_creator",
   "meeting_scheduler",
@@ -61,6 +63,7 @@ const AGENT_ABILITY_IDENTIFIERS = [
 
 const getAbilityIcon = (identifier: string) => {
   if (identifier === "whatsapp_integration") return MessageCircle;
+  if (identifier === "instagram_integration") return Instagram;
   if (identifier === "media_sender") return Image;
   if (identifier === "proposal_creator") return MessagesSquare;
   if (identifier === "meeting_scheduler") return Calendar;
