@@ -721,6 +721,56 @@ export type Database = {
           },
         ]
       }
+      instagram_config_requests: {
+        Row: {
+          id: string
+          organization_id: string | null
+          business_name: string
+          contact_email: string
+          instagram_username: string
+          instagram_profile_url: string | null
+          facebook_page_url: string | null
+          has_meta_app: boolean
+          meta_app_id: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id?: string | null
+          business_name: string
+          contact_email: string
+          instagram_username: string
+          instagram_profile_url?: string | null
+          facebook_page_url?: string | null
+          has_meta_app?: boolean
+          meta_app_id?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string | null
+          business_name?: string
+          contact_email?: string
+          instagram_username?: string
+          instagram_profile_url?: string | null
+          facebook_page_url?: string | null
+          has_meta_app?: boolean
+          meta_app_id?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_config_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

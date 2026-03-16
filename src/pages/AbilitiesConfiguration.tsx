@@ -36,6 +36,7 @@ import {
   Target,
   Info,
   RefreshCw,
+  Instagram,
 } from "lucide-react";
 
 type AbilityStatus = "inactive" | "active_unconfigured" | "active_configured";
@@ -71,6 +72,13 @@ const getAbilityVisualInfo = (identifier: string): AbilityVisualInfo => {
     return {
       icon: <MessageCircle className="w-5 h-5" />,
       hint: "Integração com WhatsApp para envio e recebimento de mensagens via instância conectada.",
+    };
+  }
+
+  if (identifier === "instagram_integration") {
+    return {
+      icon: <Instagram className="w-5 h-5" />,
+      hint: "Integração com Instagram Direct para envio e recebimento de mensagens via conta Professional conectada.",
     };
   }
 
@@ -139,6 +147,8 @@ export const AbilitiesConfiguration = () => {
   >(new Set());
   const [hasConnectedWhatsAppInstance, setHasConnectedWhatsAppInstance] =
     useState(false);
+  const [hasConnectedInstagramInstance, setHasConnectedInstagramInstance] =
+    useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const componentRepository = useMemo(() => new ComponentRepository(), []);
@@ -202,6 +212,8 @@ export const AbilitiesConfiguration = () => {
       setHasConnectedWhatsAppInstance(
         Array.isArray(whatsappInstances) && whatsappInstances.length > 0
       );
+
+      setHasConnectedInstagramInstance(false);
     } catch (error: any) {
       toast.error(
         error?.message || "Erro ao carregar habilidades e configurações"
@@ -285,6 +297,10 @@ export const AbilitiesConfiguration = () => {
           status = hasConnectedWhatsAppInstance
             ? "active_configured"
             : "active_unconfigured";
+        } else if (component.identifier === "instagram_integration") {
+          status = hasConnectedInstagramInstance
+            ? "active_configured"
+            : "active_unconfigured";
         } else if (requiresConfig) {
           const isConfigured = configuredComponentIds.has(component.id);
           status = isConfigured ? "active_configured" : "active_unconfigured";
@@ -305,6 +321,7 @@ export const AbilitiesConfiguration = () => {
     enabledComponentIds,
     configuredComponentIds,
     hasConnectedWhatsAppInstance,
+    hasConnectedInstagramInstance,
   ]);
 
   const getStatusBadge = (status: AbilityStatus, requiresConfig: boolean) => {

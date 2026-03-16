@@ -91,6 +91,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 import { Progress } from "@/components/ui/progress";
 
 const PAGE_SIZE = 20;
@@ -257,7 +262,34 @@ const LeadSearch = () => {
   const [casaDadosFiltrosAvancadosOpen, setCasaDadosFiltrosAvancadosOpen] =
     useState(false);
   const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
+  const [googleOpenNow, setGoogleOpenNow] = useState(false);
+  const [googleMinPriceLevel, setGoogleMinPriceLevel] = useState<string>("all");
+  const [googleMaxPriceLevel, setGoogleMaxPriceLevel] = useState<string>("all");
   const searchCacheRef = useRef<Map<string, BusinessResult[]>>(new Map());
+  const googleSearchStateRef = useRef<{
+    searchResults: BusinessResult[];
+    selectedBusinessKeys: Set<string>;
+    currentPage: number;
+    totalFromApi: number | null;
+  }>({
+    searchResults: [],
+    selectedBusinessKeys: new Set(),
+    currentPage: 1,
+    totalFromApi: null,
+  });
+  const casaDadosSearchStateRef = useRef<{
+    searchResults: BusinessResult[];
+    selectedBusinessKeys: Set<string>;
+    currentPage: number;
+    totalFromApi: number | null;
+    casaDadosApiPage: number;
+  }>({
+    searchResults: [],
+    selectedBusinessKeys: new Set(),
+    currentPage: 1,
+    totalFromApi: null,
+    casaDadosApiPage: 1,
+  });
 
   const activeFiltersCount = useMemo(() => {
     if (searchSource === "google") return 0;
@@ -693,7 +725,6 @@ const LeadSearch = () => {
       setCurrentPage(1);
       setTotalFromApi(null);
       setCasaDadosApiPage(1);
-      toast.info("Resultados carregados do cache");
       return;
     }
 
@@ -715,6 +746,15 @@ const LeadSearch = () => {
               categories: selectedCategories,
               textQuery: normalizedFreeTextSearch || undefined,
               radius: searchParams.radius,
+              openNow: googleOpenNow || undefined,
+              minPriceLevel:
+                googleMinPriceLevel === "all"
+                  ? undefined
+                  : Number(googleMinPriceLevel),
+              maxPriceLevel:
+                googleMaxPriceLevel === "all"
+                  ? undefined
+                  : Number(googleMaxPriceLevel),
             }
           : {
               uf: casaDosDadosParams.uf,
@@ -1519,18 +1559,54 @@ const LeadSearch = () => {
           </div>
         </div>
 
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="flex-1 min-h-0"
+          autoSaveId="lead-search-layout"
+        >
+          <ResizablePanel defaultSize={65} minSize={40} order={1}>
+          <div className="flex flex-1 flex-col overflow-hidden min-h-0 h-full">
           <div className="shrink-0 flex flex-wrap items-center gap-3 p-4 border-b bg-background/95 backdrop-blur">
             <Tabs
               value={searchSource}
               onValueChange={(value) => {
-                setSearchSource(value as "google" | "casa-dados");
-                setSearchResults([]);
-                setSelectedBusinessKeys(new Set());
-                setCurrentPage(1);
-                setTotalFromApi(null);
-                setCasaDadosApiPage(1);
+                const newSource = value as "google" | "casa-dados";
+
+                setSearchSource((previousSource) => {
+                  if (previousSource === "google") {
+                    googleSearchStateRef.current = {
+                      searchResults,
+                      selectedBusinessKeys,
+                      currentPage,
+                      totalFromApi,
+                    };
+                  } else {
+                    casaDadosSearchStateRef.current = {
+                      searchResults,
+                      selectedBusinessKeys,
+                      currentPage,
+                      totalFromApi,
+                      casaDadosApiPage,
+                    };
+                  }
+                  return newSource;
+                });
+
+                if (newSource === "google") {
+                  const saved = googleSearchStateRef.current;
+                  setSearchResults(saved.searchResults);
+                  setSelectedBusinessKeys(new Set(saved.selectedBusinessKeys));
+                  setCurrentPage(saved.currentPage || 1);
+                  setTotalFromApi(saved.totalFromApi);
+                  setCasaDadosApiPage(1);
+                } else {
+                  const saved = casaDadosSearchStateRef.current;
+                  setSearchResults(saved.searchResults);
+                  setSelectedBusinessKeys(new Set(saved.selectedBusinessKeys));
+                  setCurrentPage(saved.currentPage || 1);
+                  setTotalFromApi(saved.totalFromApi);
+                  setCasaDadosApiPage(saved.casaDadosApiPage || 1);
+                }
               }}
             >
               <TabsList className="h-9">
@@ -1640,6 +1716,58 @@ const LeadSearch = () => {
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>1 km</span>
                         <span>50 km</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                        <Label className="flex items-center gap-2 text-sm">
+                          <Zap className="w-4 h-4 text-muted-foreground" />
+                          Apenas abertos agora
+                        </Label>
+                        <Switch
+                          checked={googleOpenNow}
+                          onCheckedChange={(checked) =>
+                            setGoogleOpenNow(checked)
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2 text-sm">
+                          <DollarSign className="w-4 h-4 text-muted-foreground" />
+                          Faixa de preço
+                        </Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <Select
+                            value={googleMinPriceLevel}
+                            onValueChange={setGoogleMinPriceLevel}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Mínimo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Sem mínimo</SelectItem>
+                              <SelectItem value="0">$ (muito barato)</SelectItem>
+                              <SelectItem value="1">$</SelectItem>
+                              <SelectItem value="2">$$</SelectItem>
+                              <SelectItem value="3">$$$</SelectItem>
+                              <SelectItem value="4">$$$$ (mais caro)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={googleMaxPriceLevel}
+                            onValueChange={setGoogleMaxPriceLevel}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Máximo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Sem máximo</SelectItem>
+                              <SelectItem value="0">$ (muito barato)</SelectItem>
+                              <SelectItem value="1">$</SelectItem>
+                              <SelectItem value="2">$$</SelectItem>
+                              <SelectItem value="3">$$$</SelectItem>
+                              <SelectItem value="4">$$$$ (mais caro)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -2355,98 +2483,107 @@ const LeadSearch = () => {
                           )}`}{" "}
                       de {filteredAndSortedResults.length}
                     </p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {totalDisplayPages > 1 && (
-                        <Pagination>
-                          <PaginationContent>
-                            <PaginationItem>
-                              <PaginationPrevious
-                                href="#"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  if (currentPage > 1) {
-                                    setCurrentPage((p) => p - 1);
+                    <div className="flex flex-col sm:flex-row gap-3 items-center sm:items-stretch sm:justify-end w-full">
+                      {totalDisplayPages > 1 &&
+                        !(searchSource === "casa-dados" && hasMoreFromApi) && (
+                          <Pagination>
+                            <PaginationContent>
+                              <PaginationItem>
+                                <PaginationPrevious
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (currentPage > 1) {
+                                      setCurrentPage((p) => p - 1);
+                                    }
+                                  }}
+                                  className={
+                                    currentPage <= 1
+                                      ? "pointer-events-none opacity-50"
+                                      : "cursor-pointer"
                                   }
-                                }}
-                                className={
-                                  currentPage <= 1
-                                    ? "pointer-events-none opacity-50"
-                                    : "cursor-pointer"
-                                }
-                              />
-                            </PaginationItem>
-                            {Array.from(
-                              { length: Math.min(5, totalDisplayPages) },
-                              (_, i) => {
-                                let pageNum: number;
-                                if (totalDisplayPages <= 5) {
-                                  pageNum = i + 1;
-                                } else if (currentPage <= 3) {
-                                  pageNum = i + 1;
-                                } else if (
-                                  currentPage >=
-                                  totalDisplayPages - 2
-                                ) {
-                                  pageNum = totalDisplayPages - 4 + i;
-                                } else {
-                                  pageNum = currentPage - 2 + i;
-                                }
-                                return (
-                                  <PaginationItem key={pageNum}>
-                                    <PaginationLink
-                                      href="#"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        setCurrentPage(pageNum);
-                                      }}
-                                      isActive={currentPage === pageNum}
-                                      className="cursor-pointer"
-                                    >
-                                      {pageNum}
-                                    </PaginationLink>
-                                  </PaginationItem>
-                                );
-                              },
-                            )}
-                            <PaginationItem>
-                              <PaginationNext
-                                href="#"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  if (currentPage < totalDisplayPages) {
-                                    setCurrentPage((p) => p + 1);
+                                />
+                              </PaginationItem>
+                              {Array.from(
+                                { length: Math.min(5, totalDisplayPages) },
+                                (_, i) => {
+                                  let pageNum: number;
+                                  if (totalDisplayPages <= 5) {
+                                    pageNum = i + 1;
+                                  } else if (currentPage <= 3) {
+                                    pageNum = i + 1;
+                                  } else if (
+                                    currentPage >=
+                                    totalDisplayPages - 2
+                                  ) {
+                                    pageNum = totalDisplayPages - 4 + i;
+                                  } else {
+                                    pageNum = currentPage - 2 + i;
                                   }
-                                }}
-                                className={
-                                  currentPage >= totalDisplayPages
-                                    ? "pointer-events-none opacity-50"
-                                    : "cursor-pointer"
-                                }
-                              />
-                            </PaginationItem>
-                          </PaginationContent>
-                        </Pagination>
-                      )}
+                                  return (
+                                    <PaginationItem key={pageNum}>
+                                      <PaginationLink
+                                        href="#"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          setCurrentPage(pageNum);
+                                        }}
+                                        isActive={currentPage === pageNum}
+                                        className="cursor-pointer"
+                                      >
+                                        {pageNum}
+                                      </PaginationLink>
+                                    </PaginationItem>
+                                  );
+                                },
+                              )}
+                              <PaginationItem>
+                                <PaginationNext
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (currentPage < totalDisplayPages) {
+                                      setCurrentPage((p) => p + 1);
+                                    }
+                                  }}
+                                  className={
+                                    currentPage >= totalDisplayPages
+                                      ? "pointer-events-none opacity-50"
+                                      : "cursor-pointer"
+                                  }
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        )}
                       {searchSource === "casa-dados" && hasMoreFromApi && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleLoadMore}
-                          disabled={isLoadingMore}
-                          className="gap-2"
-                        >
-                          {isLoadingMore ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Carregando...
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-4 h-4" />
-                              Carregar mais
-                            </>
+                        <div className="w-full sm:w-auto flex flex-col gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleLoadMore}
+                            disabled={isLoadingMore}
+                            className="gap-2 w-full"
+                          >
+                            {isLoadingMore ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Carregando mais resultados...
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-4 h-4" />
+                                Carregar mais resultados
+                              </>
+                            )}
+                          </Button>
+                          {totalFromApi !== null && (
+                            <p className="text-[11px] text-muted-foreground text-center">
+                              {searchResults.length} de {totalFromApi} resultados
+                              carregados da Casa dos Dados
+                            </p>
                           )}
-                        </Button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -2477,7 +2614,10 @@ const LeadSearch = () => {
             </div>
           </ScrollArea>
           </div>
-          <div className="w-[min(420px,35vw)] shrink-0 border-l bg-muted/30 flex flex-col min-h-0">
+          </ResizablePanel>
+          <ResizableHandle withHandle className="bg-border" />
+          <ResizablePanel defaultSize={35} minSize={20} maxSize={50} order={2}>
+          <div className="h-full border-l bg-muted/30 flex flex-col min-h-0">
             <Card className="flex-1 overflow-hidden rounded-none border-0 min-h-[320px]">
               <CardContent className="p-0 h-full">
                 <InteractiveMap
@@ -2491,7 +2631,8 @@ const LeadSearch = () => {
               </CardContent>
             </Card>
           </div>
-        </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
 
       <LeadPreviewDialog
