@@ -37,6 +37,8 @@ import { AbilitiesConfiguration } from "./pages/AbilitiesConfiguration";
 import { OAuthCallback } from "./pages/OAuthCallback";
 import { Calendar } from "./pages/Calendar";
 import Playground from "./pages/Playground";
+import Products from "./pages/Products";
+import ProductForm from "./pages/ProductForm";
 
 const queryClient = new QueryClient();
 
@@ -247,6 +249,30 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Calendar />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/products"
+              element={
+                <ProtectedRoute>
+                  <Products />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/products/new"
+              element={
+                <ProtectedRoute>
+                  <ProductForm />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/products/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <ProductForm />
                 </ProtectedRoute>
               }
             />

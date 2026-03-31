@@ -857,6 +857,68 @@ export type Database = {
           },
         ]
       }
+      products: {
+        Row: {
+          category: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          differentiators: string | null
+          features: string | null
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          price: number | null
+          tags: string[]
+          target_audience: string | null
+          updated_at: string
+          use_cases: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          differentiators?: string | null
+          features?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          price?: number | null
+          tags?: string[]
+          target_audience?: string | null
+          updated_at?: string
+          use_cases?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          differentiators?: string | null
+          features?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          price?: number | null
+          tags?: string[]
+          target_audience?: string | null
+          updated_at?: string
+          use_cases?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_interactions: {
         Row: {
           ai_interaction_id: string

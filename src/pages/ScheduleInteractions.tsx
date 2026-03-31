@@ -105,6 +105,7 @@ const ScheduleInteractions = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { organization } = useOrganization();
+  const organizationId = organization?.id;
   const [activeTab, setActiveTab] = useState("view");
   const [leads, setLeads] = useState<ScheduledInteraction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -268,11 +269,13 @@ const ScheduleInteractions = () => {
   }, [computedScheduledLeads, selectedLeadIds.length]);
 
   const fetchAiInteractionSettings = useCallback(async () => {
+    if (!organizationId) return;
     setLoadingSettings(true);
     try {
       const { data, error } = await supabase
         .from("ai_interaction_settings")
         .select("id, name, conversation_focus")
+        .eq("organization_id", organizationId)
         .order("name", { ascending: true });
 
       if (error) throw error;
@@ -287,7 +290,7 @@ const ScheduleInteractions = () => {
     } finally {
       setLoadingSettings(false);
     }
-  }, [defaultAiInteractionId]);
+  }, [defaultAiInteractionId, organizationId]);
 
   useEffect(() => {
     fetchAiInteractionSettings();
@@ -318,6 +321,7 @@ const ScheduleInteractions = () => {
           const { data: whatsappInstances } = await supabase
             .from("whatsapp_instances")
             .select("instance_name")
+            .eq("organization_id", organizationId)
             .eq("status", "connected")
             .order("created_at", { ascending: false })
             .limit(1);
@@ -330,6 +334,7 @@ const ScheduleInteractions = () => {
         const { data: whatsappInstances } = await supabase
           .from("whatsapp_instances")
           .select("instance_name")
+          .eq("organization_id", organizationId)
           .eq("status", "connected")
           .order("created_at", { ascending: false })
           .limit(1);
@@ -355,9 +360,10 @@ const ScheduleInteractions = () => {
     };
 
     loadData();
-  }, [location.state, defaultAiInteractionId]);
+  }, [location.state, defaultAiInteractionId, organizationId]);
 
   const fetchScheduledInteractions = useCallback(async () => {
+    if (!organizationId) return;
     setLoadingScheduled(true);
     try {
       let query = supabase
@@ -365,15 +371,17 @@ const ScheduleInteractions = () => {
         .select(
           `
           *,
-          leads (
+          leads!inner (
             name,
-            contact_whatsapp
+            contact_whatsapp,
+            organization_id
           ),
           ai_interaction_settings (
             name
           )
         `
         )
+        .eq("leads.organization_id", organizationId)
         .order("scheduled_at", { ascending: false });
 
       if (statusFilter !== "all") {
@@ -441,6 +449,7 @@ const ScheduleInteractions = () => {
       setLoadingScheduled(false);
     }
   }, [
+    organizationId,
     statusFilter,
     scheduledDateFilterStart,
     scheduledDateFilterEnd,
@@ -449,10 +458,12 @@ const ScheduleInteractions = () => {
   ]);
 
   const fetchAvailableInstances = useCallback(async () => {
+    if (!organizationId) return;
     try {
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .select("instance_name")
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -460,7 +471,7 @@ const ScheduleInteractions = () => {
     } catch (error: any) {
       console.error("Erro ao carregar instâncias:", error);
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     if (activeTab === "view") {
