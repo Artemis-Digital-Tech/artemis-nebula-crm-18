@@ -38,6 +38,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AgentScriptSelector } from "@/components/agents/AgentScriptSelector";
+import {
+  AgentScriptRepository,
+  IAgentScript,
+} from "@/services/agents/AgentScriptRepository";
 
 const AVAILABLE_TRAITS = [
   "empático",
@@ -179,6 +183,7 @@ const AgentCreate = () => {
 
   const repository = useMemo(() => new AgentRepository(), []);
   const componentRepository = useMemo(() => new ComponentRepository(), []);
+  const scriptRepository = useMemo(() => new AgentScriptRepository(), []);
 
   const steps = [
     { id: "basic", label: "Básico", description: "Informações principais" },
@@ -425,6 +430,54 @@ const AgentCreate = () => {
     const newAgent = new Agent(agent.getData());
     newAgent.updateField(field, value);
     setAgent(newAgent);
+  };
+
+  const applyScriptToAgent = (script: IAgentScript | null) => {
+    const current = agent.getData();
+    const nextAgent = new Agent({
+      ...current,
+      scenario_detection_enabled: script?.scenario_detection_enabled ?? false,
+      proactive_opening_message: script?.proactive_opening_message ?? null,
+      proactive_hook_message: script?.proactive_hook_message ?? null,
+      proactive_development_paper:
+        script?.proactive_development_paper ?? null,
+      proactive_development_system:
+        script?.proactive_development_system ?? null,
+      receptive_welcome_template: script?.receptive_welcome_template ?? null,
+      receptive_qualification_question:
+        script?.receptive_qualification_question ?? null,
+      receptive_deepening_question:
+        script?.receptive_deepening_question ?? null,
+      receptive_value_proposition:
+        script?.receptive_value_proposition ?? null,
+      company_clients: script?.company_clients ?? [],
+      total_clients: script?.total_clients ?? null,
+    });
+    setAgent(nextAgent);
+  };
+
+  const handleScriptChange = async (scriptId: string | null) => {
+    handleFieldChange("script_id", scriptId);
+
+    if (!scriptId) {
+      applyScriptToAgent(null);
+      return;
+    }
+
+    try {
+      const script = await scriptRepository.findById(scriptId);
+      if (!script) {
+        toast.error("Roteiro selecionado não encontrado");
+        applyScriptToAgent(null);
+        return;
+      }
+      applyScriptToAgent(script);
+      toast.success("Roteiro aplicado ao agente");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro ao carregar roteiro";
+      toast.error(errorMessage);
+    }
   };
 
   const handleTraitsChange = (traits: string[]) => {
@@ -1476,9 +1529,7 @@ const AgentCreate = () => {
                           <AgentScriptSelector
                             organizationId={organization?.id || ""}
                             value={agentData.script_id || null}
-                            onChange={(scriptId) =>
-                              handleFieldChange("script_id", scriptId)
-                            }
+                            onChange={handleScriptChange}
                           />
                         </div>
                       </div>
