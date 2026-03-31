@@ -173,6 +173,7 @@ serve(async (req) => {
           const phoneNumber = lead.contact_whatsapp || scheduledInteraction.remote_jid.split("@")[0];
           const remoteJid = scheduledInteraction.remote_jid;
           const contactName = lead.name || "";
+          const leadContactOrigin = lead.source || "base de contatos da organização";
 
           const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
           const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
@@ -209,6 +210,7 @@ serve(async (req) => {
               id: scheduledInteraction.id,
               scheduled_at: scheduledInteraction.scheduled_at,
             },
+            lead_contact_origin: leadContactOrigin,
             timestamp: new Date().toISOString(),
           };
 
@@ -241,6 +243,7 @@ serve(async (req) => {
             .update({
               status: "conversation_started",
               whatsapp_verified: true,
+              ai_interaction_id: scheduledInteraction.ai_interaction_id,
             })
             .eq("id", scheduledInteraction.lead_id);
 

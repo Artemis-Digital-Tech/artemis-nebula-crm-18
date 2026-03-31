@@ -39,6 +39,78 @@ const normalizePhoneNumber = (phone: string): string => {
   return `55${cleaned}`;
 };
 
+const resolveLeadAiInteractionId = async ({
+  supabase,
+  organizationId,
+  instanceName,
+  lead,
+}: {
+  supabase: any;
+  organizationId: string;
+  instanceName: string | null;
+  lead: any;
+}): Promise<string | null> => {
+  if (lead?.ai_interaction_id) {
+    return lead.ai_interaction_id;
+  }
+
+  if (lead?.id && instanceName) {
+    const { data: activeScheduledInteraction } = await supabase
+      .from('scheduled_interactions')
+      .select('ai_interaction_id')
+      .eq('lead_id', lead.id)
+      .eq('instance_name', instanceName)
+      .eq('status', 'active')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (activeScheduledInteraction?.ai_interaction_id) {
+      return activeScheduledInteraction.ai_interaction_id;
+    }
+  }
+
+  if (instanceName) {
+    const { data: whatsappInstance } = await supabase
+      .from('whatsapp_instances')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('instance_name', instanceName)
+      .maybeSingle();
+
+    if (whatsappInstance?.id) {
+      const { data: whatsappComponent } = await supabase
+        .from('components')
+        .select('id')
+        .eq('identifier', 'whatsapp_integration')
+        .maybeSingle();
+
+      if (whatsappComponent?.id) {
+        const { data: integrationConfig } = await supabase
+          .from('agent_component_configurations')
+          .select('agent_id')
+          .eq('component_id', whatsappComponent.id)
+          .contains('config', { whatsapp_instance_id: whatsappInstance.id })
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (integrationConfig?.agent_id) {
+          return integrationConfig.agent_id;
+        }
+      }
+    }
+  }
+
+  const { data: settings } = await supabase
+    .from('settings')
+    .select('default_ai_interaction_id')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
+  return settings?.default_ai_interaction_id || null;
+};
+
 Deno.serve(async (req) => {
 
   if (req.method === 'OPTIONS') {
@@ -316,7 +388,7 @@ Deno.serve(async (req) => {
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_instances')
       .select('organization_id')
-      .eq('instance_name', payload.instance)
+      .eq('instance_name', instanceName)
       .single();
 
     if (instanceError || !instance) {
@@ -376,6 +448,13 @@ Deno.serve(async (req) => {
 
       console.log('Creating new lead for:', phoneNumber);
 
+      const preResolvedAiInteractionId = await resolveLeadAiInteractionId({
+        supabase,
+        organizationId: instance.organization_id,
+        instanceName: instanceName || null,
+        lead: null,
+      });
+
       const { data: newLead, error: insertError } = await supabase
         .from('leads')
         .insert({
@@ -386,6 +465,7 @@ Deno.serve(async (req) => {
           whatsapp_verified: true,
           source: 'whatsapp',
           remote_jid: remoteJid,
+          ai_interaction_id: preResolvedAiInteractionId,
         })
         .select()
         .single();
@@ -417,6 +497,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (lead) {
+      const resolvedAiInteractionId = await resolveLeadAiInteractionId({
+        supabase,
+        organizationId: instance.organization_id,
+        instanceName: instanceName || null,
+        lead,
+      });
+
+      if (resolvedAiInteractionId && lead.ai_interaction_id !== resolvedAiInteractionId) {
+        const { error: leadAiUpdateError } = await supabase
+          .from('leads')
+          .update({ ai_interaction_id: resolvedAiInteractionId })
+          .eq('id', lead.id);
+
+        if (!leadAiUpdateError) {
+          lead.ai_interaction_id = resolvedAiInteractionId;
+        } else {
+          console.error('Error updating lead ai_interaction_id:', leadAiUpdateError);
+        }
+      }
+    }
+
     const messageType = payload.data?.messageType || null;
     const conversation = payload.data?.message?.conversation || null;
     const messageId = payload.data?.key?.id || null;
@@ -438,19 +540,7 @@ Deno.serve(async (req) => {
     let agentComponentConfigurations: any[] = [];
 
     if (lead) {
-      if (lead.ai_interaction_id) {
-        aiInteractionId = lead.ai_interaction_id;
-      } else {
-        const { data: settings } = await supabase
-          .from('settings')
-          .select('default_ai_interaction_id')
-          .eq('organization_id', instance.organization_id)
-          .maybeSingle();
-
-        if (settings?.default_ai_interaction_id) {
-          aiInteractionId = settings.default_ai_interaction_id;
-        }
-      }
+      aiInteractionId = lead.ai_interaction_id || null;
 
       if (aiInteractionId) {
         const { data: aiInteraction, error: aiError } = await supabase
