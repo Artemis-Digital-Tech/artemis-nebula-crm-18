@@ -22,6 +22,7 @@ import {
   Clock,
   CalendarDays,
   CircleDollarSign,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -333,6 +334,7 @@ const menuItems: MenuItem[] = [
       },
     ],
   },
+  { title: "Produtos", url: "/products", icon: Package },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 
