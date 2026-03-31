@@ -5,6 +5,8 @@
 echo "🚀 Fazendo deploy das Edge Functions..."
 echo ""
 
+
+
 # Verifica se está logado
 if ! supabase projects list > /dev/null 2>&1; then
     echo "❌ Você precisa fazer login no Supabase primeiro."
