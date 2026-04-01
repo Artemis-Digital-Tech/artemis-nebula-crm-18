@@ -635,6 +635,20 @@ Deno.serve(async (req) => {
       }
     }
 
+    let organizationProducts: any[] = [];
+    const { data: productsData, error: productsError } = await supabase
+      .from('products')
+      .select(
+        'id, name, category, description, price, currency, features, target_audience, use_cases, differentiators, tags',
+      )
+      .eq('organization_id', instance.organization_id)
+      .eq('is_active', true)
+      .order('name');
+
+    if (!productsError && productsData) {
+      organizationProducts = productsData;
+    }
+
     const responseData = {
       success: true,
       message: 'Lead processed',
@@ -644,6 +658,7 @@ Deno.serve(async (req) => {
       agent_components: agentComponents,
       agent_component_configurations: agentComponentConfigurations,
       lead_statuses: leadStatuses,
+      organization_products: organizationProducts,
       messageType: messageType,
       conversation: conversation,
       messageId: messageId,
@@ -685,6 +700,7 @@ Deno.serve(async (req) => {
             agent_components: agentComponents,
             agent_component_configurations: agentComponentConfigurations,
             lead_statuses: leadStatuses,
+            organization_products: organizationProducts,
             message: payload.data?.message,
             messageType: messageType,
             conversation: conversation,

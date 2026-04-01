@@ -127,6 +127,19 @@ export interface IYgdrasilChatRequest {
     created_at: string;
     updated_at: string;
   }>;
+  organization_products?: Array<{
+    id: string;
+    name: string;
+    category: string | null;
+    description: string | null;
+    price: number | null;
+    currency: string;
+    features: string | null;
+    target_audience: string | null;
+    use_cases: string | null;
+    differentiators: string | null;
+    tags: string[];
+  }>;
   message: {
     conversation: string;
     messageContextInfo?: Record<string, unknown>;

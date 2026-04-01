@@ -932,6 +932,31 @@ const Playground = () => {
         toast.error("Erro ao buscar status dos leads");
       }
 
+      type OrganizationProductRow = NonNullable<
+        IYgdrasilChatRequest["organization_products"]
+      >[number];
+      let organizationProducts: OrganizationProductRow[] = [];
+      try {
+        if (organization?.id) {
+          const { data: productsData, error: productsError } = await (
+            supabase as any
+          )
+            .from("products")
+            .select(
+              "id, name, category, description, price, currency, features, target_audience, use_cases, differentiators, tags"
+            )
+            .eq("organization_id", organization.id)
+            .eq("is_active", true)
+            .order("name");
+
+          if (!productsError && Array.isArray(productsData)) {
+            organizationProducts = productsData as unknown as OrganizationProductRow[];
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao buscar produtos da organização:", error);
+      }
+
       const messageContent = inputMessage.trim();
 
       // Garantir que todos os campos do ai_config sejam sempre enviados
@@ -1030,6 +1055,7 @@ const Playground = () => {
           currentAgentComponentConfigurations || [],
         component_configurations: mediaConfigurations || undefined,
         lead_statuses: leadStatusesData,
+        organization_products: organizationProducts,
         message: {
           conversation: messageContent,
         },

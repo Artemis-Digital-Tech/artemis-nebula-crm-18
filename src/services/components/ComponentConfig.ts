@@ -93,6 +93,10 @@ export class ComponentConfigService {
       configType: "custom",
       customConfigPath: "/media-sender",
     },
+    product_selection: {
+      requiresConfiguration: false,
+      configType: "none",
+    },
     instagram_integration: {
       requiresConfiguration: true,
       configType: "custom",
@@ -345,6 +349,22 @@ export class ComponentConfigService {
         "Identificar leads frios e atualizar status apropriado",
         "Sincronizar status com progresso real da conversa",
         "Manter funil de vendas sempre atualizado",
+      ],
+    },
+    product_selection: {
+      title: "Seleção de produtos",
+      description:
+        "Permite ao agente usar o catálogo de produtos da organização na conversa e acionar a ferramenta list_products para obter a lista atualizada quando precisar detalhar ofertas ou comparar opções.",
+      features: [
+        "Catálogo da organização enviado no contexto do webhook",
+        "Consulta sob demanda via ferramenta list_products no n8n",
+        "Nome, categoria, preço, descrição e diferenciais por produto",
+        "Apenas produtos ativos",
+      ],
+      useCases: [
+        "Responder dúvidas sobre produtos e planos",
+        "Sugerir o item mais adequado ao perfil do lead",
+        "Atualizar a lista após mudanças no cadastro sem redeploy",
       ],
     },
     media_sender: {
