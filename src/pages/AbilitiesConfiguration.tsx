@@ -11,6 +11,7 @@ import { ComponentRepository } from "@/services/components/ComponentRepository";
 import { IComponentData } from "@/services/components/ComponentDomain";
 import { ComponentConfigService } from "@/services/components/ComponentConfig";
 import { supabase } from "@/integrations/supabase/client";
+import { whatsappInstanceAgentBindingService } from "@/services/whatsapp/WhatsappInstanceAgentBindingService";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -147,6 +148,11 @@ export const AbilitiesConfiguration = () => {
   >(new Set());
   const [hasConnectedWhatsAppInstance, setHasConnectedWhatsAppInstance] =
     useState(false);
+  const [connectedWhatsappInstanceIds, setConnectedWhatsappInstanceIds] =
+    useState<string[]>([]);
+  const [boundWhatsappInstanceIds, setBoundWhatsappInstanceIds] = useState<
+    string[]
+  >([]);
   const [hasConnectedInstagramInstance, setHasConnectedInstagramInstance] =
     useState(false);
   const [loading, setLoading] = useState(false);
@@ -209,9 +215,18 @@ export const AbilitiesConfiguration = () => {
         throw whatsappError;
       }
 
-      setHasConnectedWhatsAppInstance(
-        Array.isArray(whatsappInstances) && whatsappInstances.length > 0
-      );
+      const connectedIds = Array.isArray(whatsappInstances)
+        ? whatsappInstances.map((row) => row.id as string)
+        : [];
+
+      setConnectedWhatsappInstanceIds(connectedIds);
+      setHasConnectedWhatsAppInstance(connectedIds.length > 0);
+
+      const boundSet =
+        await whatsappInstanceAgentBindingService.listWhatsappInstanceIdsWithAgentInOrganization(
+          organization.id,
+        );
+      setBoundWhatsappInstanceIds(Array.from(boundSet));
 
       setHasConnectedInstagramInstance(false);
     } catch (error: any) {
@@ -294,9 +309,15 @@ export const AbilitiesConfiguration = () => {
 
       if (enabled) {
         if (component.identifier === "whatsapp_integration") {
-          status = hasConnectedWhatsAppInstance
-            ? "active_configured"
-            : "active_unconfigured";
+          const everyConnectedHasAgent =
+            connectedWhatsappInstanceIds.length > 0 &&
+            connectedWhatsappInstanceIds.every((instanceId) =>
+              boundWhatsappInstanceIds.includes(instanceId),
+            );
+          status =
+            hasConnectedWhatsAppInstance && everyConnectedHasAgent
+              ? "active_configured"
+              : "active_unconfigured";
         } else if (component.identifier === "instagram_integration") {
           status = hasConnectedInstagramInstance
             ? "active_configured"
@@ -322,6 +343,8 @@ export const AbilitiesConfiguration = () => {
     configuredComponentIds,
     hasConnectedWhatsAppInstance,
     hasConnectedInstagramInstance,
+    connectedWhatsappInstanceIds,
+    boundWhatsappInstanceIds,
   ]);
 
   const getStatusBadge = (status: AbilityStatus, requiresConfig: boolean) => {
@@ -657,8 +680,10 @@ export const AbilitiesConfiguration = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 Para considerar a habilidade de WhatsApp como{" "}
-                <span className="font-semibold">configurada</span>, é necessário
-                ter ao menos uma instância criada e conectada.
+                <span className="font-semibold">configurada</span>, cada
+                instância conectada precisa estar vinculada a um agente em{" "}
+                <span className="font-semibold">Conectar WhatsApp</span> ou na
+                edição do agente.
               </p>
               <Button
                 type="button"

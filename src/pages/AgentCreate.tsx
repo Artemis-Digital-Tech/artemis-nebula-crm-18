@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -15,18 +16,22 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
-import {
-  Agent,
-  AgentTemplateService,
-  IAgentData,
-} from "@/services/agents/AgentDomain";
+import { Agent, IAgentData } from "@/services/agents/AgentDomain";
 import { AgentRepository } from "@/services/agents/AgentRepository";
 import { PersonalityTraitsDragDrop } from "@/components/agents/PersonalityTraitsDragDrop";
 import { VisualLevelSelector } from "@/components/agents/VisualLevelSelector";
 import { AgentPreview } from "@/components/agents/AgentPreview";
 import { StepNavigation } from "@/components/agents/StepNavigation";
 import { ComponentsDragDrop } from "@/components/agents/ComponentsDragDrop";
-import { Save, ArrowLeft, Sparkles, Wand2, Loader2, Info } from "lucide-react";
+import {
+  Save,
+  ArrowLeft,
+  Sparkles,
+  Wand2,
+  Loader2,
+  Info,
+  MessageCircle,
+} from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
 import { supabase } from "@/integrations/supabase/client";
 import { ComponentRepository } from "@/services/components/ComponentRepository";
@@ -42,6 +47,7 @@ import {
   AgentScriptRepository,
   IAgentScript,
 } from "@/services/agents/AgentScriptRepository";
+import { whatsappInstanceAgentBindingService } from "@/services/whatsapp/WhatsappInstanceAgentBindingService";
 
 const AVAILABLE_TRAITS = [
   "empático",
@@ -153,6 +159,8 @@ const AgentCreate = () => {
   >(null);
   const [whatsappIntentionallyRemoved, setWhatsappIntentionallyRemoved] =
     useState(false);
+  const [whatsappInstanceIdsClaimedByOthers, setWhatsappInstanceIdsClaimedByOthers] =
+    useState<string[]>([]);
   const [agent, setAgent] = useState<Agent>(
     new Agent({
       name: "",
@@ -237,9 +245,54 @@ const AgentCreate = () => {
     return selectedComponentIds.includes(whatsappComponent.id);
   }, [selectedComponentIds, whatsappComponent]);
 
-  const shouldShowWhatsappInstanceSelector = useMemo(() => {
-    return hasWhatsappSelected && whatsappInstances.length > 1;
+  const showWhatsappInstancePicker = useMemo(() => {
+    return hasWhatsappSelected && whatsappInstances.length > 0;
   }, [hasWhatsappSelected, whatsappInstances.length]);
+
+  const availableWhatsappInstancesForPicker = useMemo(() => {
+    return whatsappInstances.filter(
+      (instance) => !whatsappInstanceIdsClaimedByOthers.includes(instance.id),
+    );
+  }, [whatsappInstances, whatsappInstanceIdsClaimedByOthers]);
+
+  const selectedWhatsappInstance = useMemo(() => {
+    return availableWhatsappInstancesForPicker.find(
+      (instance) => instance.id === selectedWhatsappInstanceId,
+    );
+  }, [availableWhatsappInstancesForPicker, selectedWhatsappInstanceId]);
+
+  const canProceedFromComponentsStep = useMemo(() => {
+    if (!hasWhatsappSelected) {
+      return true;
+    }
+    if (whatsappInstances.length === 0) {
+      return false;
+    }
+    if (availableWhatsappInstancesForPicker.length === 0) {
+      return false;
+    }
+    return (
+      !!selectedWhatsappInstanceId &&
+      availableWhatsappInstancesForPicker.some(
+        (instance) => instance.id === selectedWhatsappInstanceId,
+      )
+    );
+  }, [
+    hasWhatsappSelected,
+    whatsappInstances.length,
+    availableWhatsappInstancesForPicker,
+    selectedWhatsappInstanceId,
+  ]);
+
+  const stepNavigationCanGoNext = useMemo(() => {
+    if (currentStep >= steps.length - 1) {
+      return false;
+    }
+    if (currentStep === 3 && !canProceedFromComponentsStep) {
+      return false;
+    }
+    return true;
+  }, [currentStep, canProceedFromComponentsStep, steps.length]);
 
   const handleComponentSelectionChange = useCallback(
     (newSelectedIds: string[]) => {
@@ -251,8 +304,13 @@ const AgentCreate = () => {
 
       if (whatsappWasSelected && !whatsappIsNowSelected && whatsappComponent) {
         setWhatsappIntentionallyRemoved(true);
+        setSelectedWhatsappInstanceId(null);
       } else if (!whatsappWasSelected && whatsappIsNowSelected) {
         setWhatsappIntentionallyRemoved(false);
+        setSelectedWhatsappInstanceId(null);
+        toast.info(
+          "Escolha abaixo qual instância WhatsApp este agente deve usar.",
+        );
       }
 
       setSelectedComponentIds(newSelectedIds);
@@ -304,6 +362,24 @@ const AgentCreate = () => {
       setWhatsappInstances([]);
     }
   }, [organization?.id]);
+
+  const loadWhatsappInstanceClaims = useCallback(async () => {
+    if (!organization?.id) {
+      setWhatsappInstanceIdsClaimedByOthers([]);
+      return;
+    }
+    try {
+      const claimed =
+        await whatsappInstanceAgentBindingService.getWhatsappInstanceIdsClaimedByOtherAgents(
+          organization.id,
+          id ?? null,
+        );
+      setWhatsappInstanceIdsClaimedByOthers([...claimed]);
+    } catch (error) {
+      console.error("Erro ao carregar vínculos de instâncias WhatsApp:", error);
+      setWhatsappInstanceIdsClaimedByOthers([]);
+    }
+  }, [organization?.id, id]);
 
   const loadAgentComponentConfig = useCallback(
     async (agentId: string) => {
@@ -360,8 +436,14 @@ const AgentCreate = () => {
     if (organization?.id) {
       loadAvailableComponents();
       loadWhatsappInstances();
+      void loadWhatsappInstanceClaims();
     }
-  }, [organization?.id, loadAvailableComponents, loadWhatsappInstances]);
+  }, [
+    organization?.id,
+    loadAvailableComponents,
+    loadWhatsappInstances,
+    loadWhatsappInstanceClaims,
+  ]);
 
   useEffect(() => {
     if (id && components.length > 0) {
@@ -377,51 +459,24 @@ const AgentCreate = () => {
       !whatsappIntentionallyRemoved
     ) {
       setSelectedComponentIds((prev) => [...prev, whatsappComponent.id]);
+    }
+  }, [id, whatsappComponent, selectedComponentIds, whatsappIntentionallyRemoved]);
 
-      if (whatsappInstances.length === 1 && !selectedWhatsappInstanceId) {
-        setSelectedWhatsappInstanceId(whatsappInstances[0].id);
-      }
+  useEffect(() => {
+    if (!selectedWhatsappInstanceId) {
+      return;
+    }
+    if (
+      !availableWhatsappInstancesForPicker.some(
+        (instance) => instance.id === selectedWhatsappInstanceId,
+      )
+    ) {
+      setSelectedWhatsappInstanceId(null);
     }
   }, [
-    id,
-    whatsappInstances,
-    whatsappComponent,
-    selectedComponentIds,
+    availableWhatsappInstancesForPicker,
     selectedWhatsappInstanceId,
-    whatsappIntentionallyRemoved,
   ]);
-
-  const handleTemplateSelect = (
-    template: ReturnType<typeof AgentTemplateService.getTemplates>[0]
-  ) => {
-    const newAgent = new Agent({
-      name: "",
-      nickname: null,
-      agent_description: null,
-      conversation_focus: "",
-      priority: "medium",
-      rejection_action: "follow_up",
-      tone: "professional",
-      main_objective: "",
-      additional_instructions: null,
-      closing_instructions: null,
-      personality_traits: [],
-      communication_style: "balanced",
-      expertise_level: "intermediate",
-      response_length: "medium",
-      empathy_level: "moderate",
-      formality_level: "professional",
-      humor_level: "none",
-      proactivity_level: "moderate",
-      agent_avatar_url: template.icon ? `emoji:${template.icon}` : null,
-      agent_color: "#3b82f6",
-      should_introduce_itself: true,
-      memory_amount: "20",
-    });
-    AgentTemplateService.applyTemplate(newAgent, template);
-    setAgent(newAgent);
-    toast.success(`Template "${template.name}" aplicado!`);
-  };
 
   const handleFieldChange = <K extends keyof IAgentData>(
     field: K,
@@ -564,71 +619,59 @@ const AgentCreate = () => {
   };
 
   const saveAgentComponentConfig = async (agentId: string) => {
-    if (whatsappComponent && hasWhatsappSelected) {
-      if (shouldShowWhatsappInstanceSelector && !selectedWhatsappInstanceId) {
+    if (!whatsappComponent) {
+      return;
+    }
+
+    if (hasWhatsappSelected) {
+      if (whatsappInstances.length === 0) {
         toast.error(
-          "Selecione uma instância WhatsApp para o agente ou remova a habilidade WhatsApp"
+          "Conecte pelo menos uma instância WhatsApp ou remova a habilidade",
+        );
+        throw new Error("Nenhuma instância WhatsApp conectada");
+      }
+      if (availableWhatsappInstancesForPicker.length === 0) {
+        toast.error(
+          "Todas as instâncias conectadas já estão vinculadas a outros agentes",
+        );
+        throw new Error("Nenhuma instância WhatsApp disponível para este agente");
+      }
+      if (!selectedWhatsappInstanceId) {
+        toast.error(
+          "Selecione qual instância WhatsApp este agente deve usar",
         );
         throw new Error("Instância WhatsApp não selecionada");
       }
-
-      if (shouldShowWhatsappInstanceSelector && selectedWhatsappInstanceId) {
-        const { error } = await supabase
-          .from("agent_component_configurations")
-          .upsert(
-            {
-              agent_id: agentId,
-              component_id: whatsappComponent.id,
-              config: {
-                whatsapp_instance_id: selectedWhatsappInstanceId,
-              },
-            },
-            {
-              onConflict: "agent_id,component_id",
-            }
-          );
-
-        if (error) {
-          throw new Error(
-            `Erro ao salvar configuração do componente: ${error.message}`
-          );
-        }
-      } else if (hasWhatsappSelected && !shouldShowWhatsappInstanceSelector) {
-        if (whatsappInstances.length === 1) {
-          const { error } = await supabase
-            .from("agent_component_configurations")
-            .upsert(
-              {
-                agent_id: agentId,
-                component_id: whatsappComponent.id,
-                config: {
-                  whatsapp_instance_id: whatsappInstances[0].id,
-                },
-              },
-              {
-                onConflict: "agent_id,component_id",
-              }
-            );
-
-          if (error) {
-            throw new Error(
-              `Erro ao salvar configuração do componente: ${error.message}`
-            );
-          }
-        }
-      } else if (!hasWhatsappSelected && whatsappComponent) {
-        const { error } = await supabase
-          .from("agent_component_configurations")
-          .delete()
-          .eq("agent_id", agentId)
-          .eq("component_id", whatsappComponent.id);
-
-        if (error) {
-          console.error("Erro ao remover configuração do componente:", error);
-        }
+      if (
+        !availableWhatsappInstancesForPicker.some(
+          (instance) => instance.id === selectedWhatsappInstanceId,
+        )
+      ) {
+        toast.error(
+          "A instância escolhida não está disponível ou já está em uso por outro agente",
+        );
+        throw new Error("Instância WhatsApp inválida ou indisponível");
       }
+      if (!organization?.id) {
+        throw new Error("Organização não encontrada");
+      }
+      await whatsappInstanceAgentBindingService.bindWhatsappInstanceToAgent(
+        organization.id,
+        agentId,
+        selectedWhatsappInstanceId,
+      );
+      return;
     }
 
+    const { error } = await supabase
+      .from("agent_component_configurations")
+      .delete()
+      .eq("agent_id", agentId)
+      .eq("component_id", whatsappComponent.id);
+
+    if (error) {
+      console.error("Erro ao remover configuração do componente:", error);
+    }
   };
 
   const handleSave = async () => {
@@ -706,7 +749,7 @@ const AgentCreate = () => {
           onStepChange={setCurrentStep}
           onNext={handleNext}
           onPrevious={handlePrevious}
-          canGoNext={currentStep < steps.length - 1}
+          canGoNext={stepNavigationCanGoNext}
           canGoPrevious={currentStep > 0}
         />
 
@@ -1093,41 +1136,6 @@ const AgentCreate = () => {
                         </div>
                       </div>
                     </Card>
-
-                    <div className="pt-6 mt-6 border-t">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Sparkles className="w-4 h-4 text-muted-foreground" />
-                        <Label className="text-sm text-muted-foreground">
-                          Template (Opcional)
-                        </Label>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Comece com uma configuração pré-definida ou pule para
-                        criar do zero
-                      </p>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {AgentTemplateService.getTemplates().map((template) => (
-                          <button
-                            key={template.name}
-                            type="button"
-                            onClick={() => handleTemplateSelect(template)}
-                            className="p-2 border rounded-md hover:border-primary/50 hover:bg-muted/50 transition-all text-left group"
-                          >
-                            <div className="flex items-start gap-2">
-                              <div className="text-xl">{template.icon}</div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-medium text-xs mb-0.5 truncate">
-                                  {template.name}
-                                </h4>
-                                <p className="text-[10px] text-muted-foreground line-clamp-2">
-                                  {template.description}
-                                </p>
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1170,43 +1178,142 @@ const AgentCreate = () => {
                     />
                   </div>
 
-                  {shouldShowWhatsappInstanceSelector && (
-                    <Card className="p-6 border-primary/20 bg-primary/5">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <LabelWithTooltip tooltip="Selecione qual instância WhatsApp este agente deve usar. Se você tem múltiplas instâncias conectadas, cada agente pode usar uma instância diferente.">
-                            Instância WhatsApp para este Agente
-                          </LabelWithTooltip>
-                        </div>
-                        <Select
-                          value={selectedWhatsappInstanceId || ""}
-                          onValueChange={setSelectedWhatsappInstanceId}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione uma instância WhatsApp..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {whatsappInstances.map((instance) => (
-                              <SelectItem key={instance.id} value={instance.id}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">
-                                    {instance.instance_name}
+                  {showWhatsappInstancePicker && (
+                    <Card className="overflow-hidden border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.07] via-background to-background shadow-sm">
+                      <div className="p-5 sm:p-6 space-y-5">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex gap-3 min-w-0">
+                            <div
+                              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#25D366]/15 text-[#25D366] ring-1 ring-[#25D366]/25"
+                              aria-hidden
+                            >
+                              <MessageCircle className="h-5 w-5" strokeWidth={2} />
+                            </div>
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <LabelWithTooltip tooltip="Obrigatório: escolha qual linha WhatsApp (instância conectada) este agente atende. Cada instância só pode pertencer a um agente por vez.">
+                                  <span className="text-base font-semibold tracking-tight">
+                                    Linha WhatsApp do agente
                                   </span>
-                                  {instance.phone_number && (
-                                    <span className="text-xs text-muted-foreground">
-                                      {instance.phone_number}
-                                    </span>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {!selectedWhatsappInstanceId && (
-                          <p className="text-sm text-destructive">
-                            Você deve selecionar uma instância WhatsApp para
-                            este agente.
+                                </LabelWithTooltip>
+                              </div>
+                              <p className="text-sm text-muted-foreground leading-snug max-w-prose">
+                                Apenas instâncias já conectadas aparecem aqui.
+                                Cada número pode estar em um único agente.
+                              </p>
+                            </div>
+                          </div>
+                          <Badge
+                            variant="secondary"
+                            className="shrink-0 gap-1.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 w-fit"
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"
+                              aria-hidden
+                            />
+                            Conectado
+                          </Badge>
+                        </div>
+
+                        {availableWhatsappInstancesForPicker.length === 0 ? (
+                          <p className="text-sm text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                            Todas as instâncias conectadas já estão vinculadas a
+                            outros agentes. Libere uma instância editando o
+                            outro agente ou crie outra em Conectar WhatsApp.
                           </p>
+                        ) : (
+                          <div className="space-y-3 max-w-lg">
+                            <Label
+                              htmlFor="whatsapp-instance-select"
+                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            >
+                              Instância
+                            </Label>
+                            <Select
+                              value={selectedWhatsappInstanceId || ""}
+                              onValueChange={setSelectedWhatsappInstanceId}
+                            >
+                              <SelectTrigger
+                                id="whatsapp-instance-select"
+                                className="h-auto min-h-[3.25rem] w-full py-3 pl-3 pr-3 border-emerald-500/35 bg-card/80 hover:bg-card data-[state=open]:ring-2 data-[state=open]:ring-emerald-500/25"
+                              >
+                                <div className="flex flex-1 items-center gap-3 min-w-0 text-left">
+                                  <div
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80 text-muted-foreground"
+                                    aria-hidden
+                                  >
+                                    <MessageCircle className="h-4 w-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0 space-y-0.5">
+                                    {selectedWhatsappInstance ? (
+                                      <>
+                                        <span className="block font-medium leading-tight truncate">
+                                          {selectedWhatsappInstance.instance_name}
+                                        </span>
+                                        {selectedWhatsappInstance.phone_number ? (
+                                          <span className="block text-xs text-muted-foreground tabular-nums tracking-wide">
+                                            {selectedWhatsappInstance.phone_number}
+                                          </span>
+                                        ) : (
+                                          <span className="block text-xs text-muted-foreground">
+                                            Sem número sincronizado
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">
+                                        Escolha qual instância este agente atende
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <SelectValue
+                                  className="sr-only"
+                                  placeholder="Escolha a instância WhatsApp deste agente"
+                                />
+                              </SelectTrigger>
+                              <SelectContent className="max-w-[min(100vw-2rem,28rem)]">
+                                {availableWhatsappInstancesForPicker.map(
+                                  (instance) => (
+                                    <SelectItem
+                                      key={instance.id}
+                                      value={instance.id}
+                                      className="py-3 pr-3 cursor-pointer focus:bg-emerald-500/10"
+                                    >
+                                      <div className="flex items-center gap-3 w-full min-w-0">
+                                        <div
+                                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                          aria-hidden
+                                        >
+                                          <MessageCircle className="h-4 w-4" />
+                                        </div>
+                                        <div className="flex-1 min-w-0 text-left space-y-0.5">
+                                          <span className="block font-medium leading-tight truncate">
+                                            {instance.instance_name}
+                                          </span>
+                                          {instance.phone_number ? (
+                                            <span className="block text-xs text-muted-foreground tabular-nums">
+                                              {instance.phone_number}
+                                            </span>
+                                          ) : (
+                                            <span className="block text-xs text-muted-foreground italic">
+                                              Sem número
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </SelectItem>
+                                  ),
+                                )}
+                              </SelectContent>
+                            </Select>
+                            {!selectedWhatsappInstanceId && (
+                              <p className="text-sm text-destructive flex items-center gap-2">
+                                <span className="h-1 w-1 rounded-full bg-destructive shrink-0" />
+                                Selecione uma instância para continuar.
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </Card>
@@ -1228,29 +1335,6 @@ const AgentCreate = () => {
                           >
                             Conectar instância WhatsApp
                           </Button>
-                        </p>
-                      </div>
-                    </Card>
-                  )}
-
-                  {hasWhatsappSelected && whatsappInstances.length === 1 && (
-                    <Card className="p-6 border-muted">
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">
-                          Instância WhatsApp selecionada automaticamente
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Como você tem apenas uma instância conectada, ela será
-                          usada automaticamente:{" "}
-                          <span className="font-medium">
-                            {whatsappInstances[0].instance_name}
-                          </span>
-                          {whatsappInstances[0].phone_number && (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              ({whatsappInstances[0].phone_number})
-                            </span>
-                          )}
                         </p>
                       </div>
                     </Card>

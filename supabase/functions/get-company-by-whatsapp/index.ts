@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.84.0";
+import { resolveAgentIdForWhatsappInstanceId } from "../_shared/resolve-whatsapp-instance-agent.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,7 +61,7 @@ serve(async (req) => {
 
     let instanceQuery = supabaseClient
       .from("whatsapp_instances")
-      .select("organization_id")
+      .select("id, organization_id")
       .eq("status", "connected");
 
     if (whatsapp_jid) {
@@ -98,10 +99,13 @@ serve(async (req) => {
       );
     }
 
+    const organizationId = instance.organization_id as string;
+    const instanceId = instance.id as string;
+
     const { data: organization, error: orgError } = await supabaseClient
       .from("organizations")
       .select("*")
-      .eq("id", instance.organization_id)
+      .eq("id", organizationId)
       .single();
 
     if (orgError || !organization) {
@@ -115,10 +119,10 @@ serve(async (req) => {
       );
     }
 
-    const { data: settings, error: settingsError } = await supabaseClient
+    const { data: settings } = await supabaseClient
       .from("settings")
       .select("default_ai_interaction_id")
-      .eq("organization_id", instance.organization_id)
+      .eq("organization_id", organizationId)
       .maybeSingle();
 
     let defaultAiContext = null;
@@ -127,7 +131,7 @@ serve(async (req) => {
         .from("ai_interaction_settings")
         .select("*")
         .eq("id", settings.default_ai_interaction_id)
-        .eq("organization_id", instance.organization_id)
+        .eq("organization_id", organizationId)
         .maybeSingle();
 
       if (!aiError && aiContext) {
@@ -135,10 +139,29 @@ serve(async (req) => {
       }
     }
 
+    let instanceAiContext = null;
+    const instanceBoundAgentId = await resolveAgentIdForWhatsappInstanceId(
+      supabaseClient,
+      instanceId,
+    );
+    if (instanceBoundAgentId) {
+      const { data: boundRow, error: boundError } = await supabaseClient
+        .from("ai_interaction_settings")
+        .select("*")
+        .eq("id", instanceBoundAgentId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (!boundError && boundRow) {
+        instanceAiContext = boundRow;
+      }
+    }
+
+    const resolvedAiContext = instanceAiContext ?? defaultAiContext;
+
     const { data: statuses, error: statusesError } = await supabaseClient
       .from("lead_statuses")
       .select("*")
-      .eq("organization_id", instance.organization_id)
+      .eq("organization_id", organizationId)
       .order("display_order", { ascending: true });
 
     if (statusesError) {
@@ -150,6 +173,8 @@ serve(async (req) => {
         success: true,
         organization,
         default_ai_context: defaultAiContext,
+        instance_ai_context: instanceAiContext,
+        resolved_ai_context: resolvedAiContext,
         statuses: statuses || [],
       }),
       {

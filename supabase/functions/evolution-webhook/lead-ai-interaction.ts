@@ -5,6 +5,7 @@
  */
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.84.0';
+import { resolveAgentIdForWhatsappInstanceId } from '../_shared/resolve-whatsapp-instance-agent.ts';
 
 /** Subconjunto de campos de `leads` usado na resolução do agente de IA. */
 export type LeadRow = {
@@ -12,11 +13,48 @@ export type LeadRow = {
   ai_interaction_id?: string | null;
 };
 
+async function resolveScheduledAiInteractionId(
+  supabase: SupabaseClient,
+  leadId: string,
+  instanceName: string,
+): Promise<string | null> {
+  const { data: activeScheduledInteraction } = await supabase
+    .from('scheduled_interactions')
+    .select('ai_interaction_id')
+    .eq('lead_id', leadId)
+    .eq('instance_name', instanceName)
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return activeScheduledInteraction?.ai_interaction_id ?? null;
+}
+
+async function resolveInstanceBoundAgentId(
+  supabase: SupabaseClient,
+  organizationId: string,
+  instanceName: string,
+): Promise<string | null> {
+  const { data: whatsappInstance } = await supabase
+    .from('whatsapp_instances')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('instance_name', instanceName)
+    .maybeSingle();
+
+  if (!whatsappInstance?.id) {
+    return null;
+  }
+
+  return resolveAgentIdForWhatsappInstanceId(supabase, whatsappInstance.id);
+}
+
 /**
  * Define qual registro de `ai_interaction_settings` (agente) deve atender o lead, nesta ordem:
- * 1. `lead.ai_interaction_id` já preenchido;
+ * 1. Agente vinculado à instância Evolution (`agent_component_configurations` com `whatsapp_instance_id`);
  * 2. `scheduled_interactions` ativa para o lead e instância;
- * 3. Agente vinculado ao componente WhatsApp da instância (`agent_component_configurations`);
+ * 3. `lead.ai_interaction_id` já preenchido;
  * 4. `settings.default_ai_interaction_id` da organização.
  *
  * @param lead — Lead existente ou `null` na criação (usa apenas `id`/`ai_interaction_id` quando presentes).
@@ -28,56 +66,30 @@ export async function resolveLeadAiInteractionId(
   instanceName: string | null,
   lead: LeadRow | null,
 ): Promise<string | null> {
-  if (lead?.ai_interaction_id) {
-    return lead.ai_interaction_id;
+  if (instanceName) {
+    const instanceAgentId = await resolveInstanceBoundAgentId(
+      supabase,
+      organizationId,
+      instanceName,
+    );
+    if (instanceAgentId) {
+      return instanceAgentId;
+    }
   }
 
   if (lead?.id && instanceName) {
-    const { data: activeScheduledInteraction } = await supabase
-      .from('scheduled_interactions')
-      .select('ai_interaction_id')
-      .eq('lead_id', lead.id)
-      .eq('instance_name', instanceName)
-      .eq('status', 'active')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (activeScheduledInteraction?.ai_interaction_id) {
-      return activeScheduledInteraction.ai_interaction_id;
+    const scheduledId = await resolveScheduledAiInteractionId(
+      supabase,
+      lead.id,
+      instanceName,
+    );
+    if (scheduledId) {
+      return scheduledId;
     }
   }
 
-  if (instanceName) {
-    const { data: whatsappInstance } = await supabase
-      .from('whatsapp_instances')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('instance_name', instanceName)
-      .maybeSingle();
-
-    if (whatsappInstance?.id) {
-      const { data: whatsappComponent } = await supabase
-        .from('components')
-        .select('id')
-        .eq('identifier', 'whatsapp_integration')
-        .maybeSingle();
-
-      if (whatsappComponent?.id) {
-        const { data: integrationConfig } = await supabase
-          .from('agent_component_configurations')
-          .select('agent_id')
-          .eq('component_id', whatsappComponent.id)
-          .contains('config', { whatsapp_instance_id: whatsappInstance.id })
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (integrationConfig?.agent_id) {
-          return integrationConfig.agent_id;
-        }
-      }
-    }
+  if (lead?.ai_interaction_id) {
+    return lead.ai_interaction_id;
   }
 
   const { data: settings } = await supabase

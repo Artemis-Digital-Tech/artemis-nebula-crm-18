@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,9 @@ import {
   Sun,
   Moon,
   Cloud,
-  Leaf
+  Leaf,
+  AlertCircle,
+  Bot,
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import {
@@ -39,6 +41,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useOrganization } from "@/hooks/useOrganization";
+import { whatsappInstanceAgentBindingService } from "@/services/whatsapp/WhatsappInstanceAgentBindingService";
 
 const INSTANCE_ICONS = [
   MessageCircle,
@@ -78,11 +97,47 @@ const WhatsAppConnect = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { organization } = useOrganization();
+  const [orgWhatsappEnabled, setOrgWhatsappEnabled] = useState(false);
+  const [boundInstanceIds, setBoundInstanceIds] = useState<string[]>([]);
+  const [bindDialogOpen, setBindDialogOpen] = useState(false);
+  const [instancePendingBind, setInstancePendingBind] = useState<{
+    id: string;
+    instance_name: string;
+  } | null>(null);
+  const [orgAgents, setOrgAgents] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  const [selectedAgentIdForBind, setSelectedAgentIdForBind] =
+    useState<string>("");
+  const [bindingAgent, setBindingAgent] = useState(false);
+
+  const refreshBindingMeta = useCallback(async () => {
+    if (!organization?.id) {
+      setOrgWhatsappEnabled(false);
+      setBoundInstanceIds([]);
+      return;
+    }
+    const enabled =
+      await whatsappInstanceAgentBindingService.isOrganizationWhatsappAbilityEnabled(
+        organization.id,
+      );
+    setOrgWhatsappEnabled(enabled);
+    const bound =
+      await whatsappInstanceAgentBindingService.listWhatsappInstanceIdsWithAgentInOrganization(
+        organization.id,
+      );
+    setBoundInstanceIds(Array.from(bound));
+  }, [organization?.id]);
 
   useEffect(() => {
     checkAuth();
     loadInstances();
   }, []);
+
+  useEffect(() => {
+    void refreshBindingMeta();
+  }, [refreshBindingMeta]);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -100,8 +155,65 @@ const WhatsAppConnect = () => {
 
       if (error) throw error;
       setInstances(data || []);
+      await refreshBindingMeta();
     } catch (error: any) {
       console.error("Error loading instances:", error);
+    }
+  };
+
+  const openBindDialogForInstance = async (inst: {
+    id: string;
+    instance_name: string;
+  }) => {
+    if (!organization?.id) {
+      return;
+    }
+    const { data: agents } = await supabase
+      .from("ai_interaction_settings")
+      .select("id, name")
+      .eq("organization_id", organization.id)
+      .order("name");
+    const list = agents ?? [];
+    setOrgAgents(list);
+    setSelectedAgentIdForBind(list[0]?.id ?? "");
+    setInstancePendingBind(inst);
+    setBindDialogOpen(true);
+  };
+
+  const submitInstanceAgentBinding = async () => {
+    if (!organization?.id || !instancePendingBind || !selectedAgentIdForBind) {
+      toast({
+        title: "Selecione um agente",
+        description: "É necessário escolher um agente para atender esta linha.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBindingAgent(true);
+    try {
+      await whatsappInstanceAgentBindingService.bindWhatsappInstanceToAgent(
+        organization.id,
+        selectedAgentIdForBind,
+        instancePendingBind.id,
+      );
+      toast({
+        title: "Vínculo salvo",
+        description: "Esta instância está associada ao agente selecionado.",
+      });
+      setBindDialogOpen(false);
+      setInstancePendingBind(null);
+      await refreshBindingMeta();
+      await loadInstances();
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao vincular agente";
+      toast({
+        title: "Erro",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setBindingAgent(false);
     }
   };
 
@@ -244,7 +356,7 @@ const WhatsAppConnect = () => {
 
         const { data: updatedInstance } = await supabase
           .from("whatsapp_instances")
-          .select("phone_number, whatsapp_jid, instance_name, status")
+          .select("id, phone_number, whatsapp_jid, instance_name, status")
           .eq("instance_name", instanceName)
           .single();
 
@@ -308,6 +420,49 @@ const WhatsAppConnect = () => {
           description: "WhatsApp conectado com sucesso",
         });
         await loadInstances();
+
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("organization_id")
+              .eq("id", user.id)
+              .maybeSingle();
+            const orgId = profile?.organization_id;
+            if (orgId && updatedInstance.id) {
+              const enabled =
+                await whatsappInstanceAgentBindingService.isOrganizationWhatsappAbilityEnabled(
+                  orgId,
+                );
+              if (enabled) {
+                const bound =
+                  await whatsappInstanceAgentBindingService.listWhatsappInstanceIdsWithAgentInOrganization(
+                    orgId,
+                  );
+                if (!bound.has(updatedInstance.id as string)) {
+                  const { data: agents } = await supabase
+                    .from("ai_interaction_settings")
+                    .select("id, name")
+                    .eq("organization_id", orgId)
+                    .order("name");
+                  const list = agents ?? [];
+                  setOrgAgents(list);
+                  setSelectedAgentIdForBind(list[0]?.id ?? "");
+                  setInstancePendingBind({
+                    id: updatedInstance.id as string,
+                    instance_name: updatedInstance.instance_name,
+                  });
+                  setBindDialogOpen(true);
+                }
+              }
+            }
+          }
+        } catch (bindFlowError) {
+          console.error("Post-connect bind check failed:", bindFlowError);
+        }
       } catch (error: any) {
         if (error.message?.includes("Já existe uma instância conectada")) {
           clearInterval(pollInterval);
@@ -486,15 +641,40 @@ const WhatsAppConnect = () => {
                                 Conectado em: {new Date(instance.connected_at).toLocaleString("pt-BR")}
                               </p>
                             )}
+                            {orgWhatsappEnabled &&
+                              instance.status === "connected" &&
+                              !boundInstanceIds.includes(instance.id) && (
+                                <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-1.5 mt-2">
+                                  <AlertCircle className="h-4 w-4 shrink-0" />
+                                  Habilidade WhatsApp ativa: vincule um agente a esta instância.
+                                </p>
+                              )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {instance.status === "connected" ? (
                             <>
                               <div className="flex items-center gap-2 text-green-600">
                                 <CheckCircle2 className="h-5 w-5" />
                                 <span className="text-sm font-medium">Conectado</span>
                               </div>
+                              {orgWhatsappEnabled &&
+                                !boundInstanceIds.includes(instance.id) && (
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      void openBindDialogForInstance({
+                                        id: instance.id,
+                                        instance_name: instance.instance_name,
+                                      })
+                                    }
+                                  >
+                                    <Bot className="h-4 w-4 mr-1.5" />
+                                    Vincular agente
+                                  </Button>
+                                )}
                               <Button
                                 onClick={() => reconnectInstance(instance)}
                                 disabled={isConnecting && selectedInstance?.id === instance.id}
@@ -547,6 +727,88 @@ const WhatsAppConnect = () => {
           </Card>
         </div>
       </div>
+
+      <Dialog
+        open={bindDialogOpen}
+        onOpenChange={(open) => {
+          setBindDialogOpen(open);
+          if (!open) {
+            setInstancePendingBind(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Vincular agente à instância</DialogTitle>
+            <DialogDescription>
+              A instância{" "}
+              <span className="font-medium text-foreground">
+                {instancePendingBind?.instance_name}
+              </span>{" "}
+              precisa de um agente de IA para atender as mensagens recebidas neste número
+              quando a habilidade WhatsApp está ativa na organização.
+            </DialogDescription>
+          </DialogHeader>
+          {orgAgents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum agente cadastrado.{" "}
+              <Link
+                to="/ai-interaction/create"
+                className="text-primary font-medium underline underline-offset-2"
+              >
+                Criar agente
+              </Link>
+            </p>
+          ) : (
+            <div className="space-y-2 py-2">
+              <Label htmlFor="bind-agent-select">Agente</Label>
+              <Select
+                value={selectedAgentIdForBind}
+                onValueChange={setSelectedAgentIdForBind}
+              >
+                <SelectTrigger id="bind-agent-select">
+                  <SelectValue placeholder="Selecione o agente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgAgents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBindDialogOpen(false)}
+              disabled={bindingAgent}
+            >
+              Agora não
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void submitInstanceAgentBinding()}
+              disabled={
+                bindingAgent ||
+                orgAgents.length === 0 ||
+                !selectedAgentIdForBind
+              }
+            >
+              {bindingAgent ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Confirmar vínculo"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!instanceToDelete} onOpenChange={() => setInstanceToDelete(null)}>
         <AlertDialogContent>

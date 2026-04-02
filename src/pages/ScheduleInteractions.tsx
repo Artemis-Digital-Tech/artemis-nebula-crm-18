@@ -120,8 +120,10 @@ const ScheduleInteractions = () => {
   const [statusFilter, setStatusFilter] = useState<string>("not_cancelled");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-  const [scheduledDateFilterStart, setScheduledDateFilterStart] = useState<string>("");
-  const [scheduledDateFilterEnd, setScheduledDateFilterEnd] = useState<string>("");
+  const [scheduledDateFilterStart, setScheduledDateFilterStart] =
+    useState<string>("");
+  const [scheduledDateFilterEnd, setScheduledDateFilterEnd] =
+    useState<string>("");
   const [aiInteractionFilter, setAiInteractionFilter] = useState<string>("all");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [availableInstances, setAvailableInstances] = useState<string[]>([]);
@@ -162,7 +164,7 @@ const ScheduleInteractions = () => {
       let query = supabase
         .from("leads")
         .select(
-          "id, name, contact_whatsapp, remote_jid, whatsapp_verified, created_at"
+          "id, name, contact_whatsapp, remote_jid, whatsapp_verified, created_at",
         )
         .eq("organization_id", profile.organization_id)
         .or("is_test.is.null,is_test.eq.false")
@@ -379,7 +381,7 @@ const ScheduleInteractions = () => {
           ai_interaction_settings (
             name
           )
-        `
+        `,
         )
         .eq("leads.organization_id", organizationId)
         .order("scheduled_at", { ascending: false });
@@ -438,7 +440,7 @@ const ScheduleInteractions = () => {
           status: interaction.status,
           created_at: interaction.created_at,
           updated_at: interaction.updated_at,
-        })
+        }),
       );
 
       setScheduledInteractions(interactionsWithInfo);
@@ -548,23 +550,25 @@ const ScheduleInteractions = () => {
   const updateScheduledTime = (leadId: string, dateTime: string) => {
     setLeads((prevLeads) =>
       prevLeads.map((lead) =>
-        lead.leadId === leadId ? { ...lead, scheduledDateTime: dateTime } : lead
-      )
+        lead.leadId === leadId
+          ? { ...lead, scheduledDateTime: dateTime }
+          : lead,
+      ),
     );
   };
 
   const updateAiInteraction = (leadId: string, aiInteractionId: string) => {
     setLeads((prevLeads) =>
       prevLeads.map((lead) =>
-        lead.leadId === leadId ? { ...lead, aiInteractionId } : lead
-      )
+        lead.leadId === leadId ? { ...lead, aiInteractionId } : lead,
+      ),
     );
   };
 
   const applyToAll = (field: "aiInteraction" | "time", value: string) => {
     if (field === "aiInteraction") {
       setLeads((prevLeads) =>
-        prevLeads.map((lead) => ({ ...lead, aiInteractionId: value }))
+        prevLeads.map((lead) => ({ ...lead, aiInteractionId: value })),
       );
       setDefaultAiInteractionId(value);
     } else if (field === "time") {
@@ -577,7 +581,7 @@ const ScheduleInteractions = () => {
             ...lead,
             scheduledDateTime: format(newDate, "yyyy-MM-dd'T'HH:mm"),
           };
-        })
+        }),
       );
     }
   };
@@ -589,11 +593,11 @@ const ScheduleInteractions = () => {
     }
 
     const invalidLeads = leads.filter(
-      (lead) => !lead.aiInteractionId || !lead.remoteJid
+      (lead) => !lead.aiInteractionId || !lead.remoteJid,
     );
     if (invalidLeads.length > 0) {
       toast.error(
-        "Alguns leads não têm configuração de IA ou WhatsApp configurado"
+        "Alguns leads não têm configuração de IA ou WhatsApp configurado",
       );
       return;
     }
@@ -633,7 +637,7 @@ const ScheduleInteractions = () => {
     } catch (error: any) {
       console.error("Erro ao agendar interações:", error);
       toast.error(
-        "Erro ao agendar interações: " + (error.message || "Erro desconhecido")
+        "Erro ao agendar interações: " + (error.message || "Erro desconhecido"),
       );
     } finally {
       setSaving(false);
@@ -1077,7 +1081,7 @@ const ScheduleInteractions = () => {
                         <p className="text-xs text-muted-foreground">
                           {
                             aiInteractionSettings.find(
-                              (s) => s.id === defaultAiInteractionId
+                              (s) => s.id === defaultAiInteractionId,
                             )?.conversation_focus
                           }
                         </p>
@@ -1288,7 +1292,10 @@ const ScheduleInteractions = () => {
                         className="pl-10"
                       />
                     </div>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={setStatusFilter}
+                    >
                       <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder="Filtrar por status" />
                       </SelectTrigger>
@@ -1386,7 +1393,9 @@ const ScheduleInteractions = () => {
                           <SelectValue placeholder="Todas as instâncias" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Todas as instâncias</SelectItem>
+                          <SelectItem value="all">
+                            Todas as instâncias
+                          </SelectItem>
                           {availableInstances.map((instance) => (
                             <SelectItem key={instance} value={instance}>
                               {instance}
@@ -1448,7 +1457,7 @@ const ScheduleInteractions = () => {
                               <TableCell>
                                 {interaction.lead_whatsapp
                                   ? formatPhoneDisplay(
-                                      interaction.lead_whatsapp
+                                      interaction.lead_whatsapp,
                                     )
                                   : "-"}
                               </TableCell>
@@ -1458,14 +1467,14 @@ const ScheduleInteractions = () => {
                                     {format(
                                       new Date(interaction.scheduled_at),
                                       "dd/MM/yyyy",
-                                      { locale: ptBR }
+                                      { locale: ptBR },
                                     )}
                                   </span>
                                   <span className="text-sm text-muted-foreground">
                                     {format(
                                       new Date(interaction.scheduled_at),
                                       "HH:mm",
-                                      { locale: ptBR }
+                                      { locale: ptBR },
                                     )}
                                   </span>
                                 </div>
@@ -1526,7 +1535,7 @@ const ScheduleInteractions = () => {
                                 <CardDescription className="mt-1">
                                   {interaction.lead_whatsapp
                                     ? formatPhoneDisplay(
-                                        interaction.lead_whatsapp
+                                        interaction.lead_whatsapp,
                                       )
                                     : "Sem WhatsApp"}
                                 </CardDescription>
@@ -1538,14 +1547,16 @@ const ScheduleInteractions = () => {
                             <div className="space-y-1">
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Calendar className="w-4 h-4" />
-                                <span className="font-medium">Agendado para:</span>
+                                <span className="font-medium">
+                                  Agendado para:
+                                </span>
                               </div>
                               <div className="pl-6">
                                 <div className="font-medium">
                                   {format(
                                     new Date(interaction.scheduled_at),
                                     "dd/MM/yyyy 'às' HH:mm",
-                                    { locale: ptBR }
+                                    { locale: ptBR },
                                   )}
                                 </div>
                               </div>
@@ -1563,7 +1574,9 @@ const ScheduleInteractions = () => {
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   <Smartphone className="w-4 h-4" />
-                                  <span className="font-medium">Instância:</span>
+                                  <span className="font-medium">
+                                    Instância:
+                                  </span>
                                 </div>
                                 <div className="pl-6 text-sm">
                                   {interaction.instance_name}

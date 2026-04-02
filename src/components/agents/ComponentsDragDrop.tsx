@@ -107,7 +107,7 @@ const getComponentVisualInfo = (identifier: string): ComponentVisualInfo => {
     case "whatsapp_integration":
       return {
         icon: <MessageCircle className="w-5 h-5" />,
-        hint: "Interações via WhatsApp integradas ao CRM.",
+        hint: "WhatsApp: após ativar, selecione na mesma etapa qual instância conectada pertence a este agente (cada instância só pode estar em um agente).",
         color: "text-emerald-500",
       };
     case "sentiment_analysis":
