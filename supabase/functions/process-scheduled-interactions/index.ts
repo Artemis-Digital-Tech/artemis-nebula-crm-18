@@ -159,6 +159,20 @@ serve(async (req) => {
           }
         }
 
+        let organizationProducts: any[] = [];
+        const { data: productsData, error: productsError } = await supabase
+          .from("products")
+          .select(
+            "id, name, category, description, price, currency, features, target_audience, use_cases, differentiators, tags",
+          )
+          .eq("organization_id", instance.organization_id)
+          .eq("is_active", true)
+          .order("name");
+
+        if (!productsError && productsData) {
+          organizationProducts = productsData;
+        }
+
         const { data: settings, error: settingsError } = await supabase
           .from("settings")
           .select("n8n_webhook_url")
@@ -190,6 +204,7 @@ serve(async (req) => {
             agent_components: agentComponents,
             agent_component_configurations: agentComponentConfigurations,
             lead_statuses: leadStatuses,
+            organization_products: organizationProducts,
             message: {
               conversation: conversationText,
             },
